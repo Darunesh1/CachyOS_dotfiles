@@ -5,12 +5,12 @@
 }
 
 window {
-    background-color: alpha(#030001, 0.8); /* Wallust dynamic background */
+    background-color: alpha(#010102, 0.8); /* Wallust dynamic background */
 }
 
 button {
-    color: #FF9B6F;
-    background-color: alpha(#030001, 0.5); /* Wallust dynamic button color */
+    color: #9BA2CE;
+    background-color: alpha(#010103, 0.5); /* Wallust dynamic button color */
     outline-style: none;
     border: none;
     border-radius: 20px; /* Uniform rounded corners */
@@ -22,7 +22,7 @@ button {
 }
 
 button:hover, button:active, button:focus {
-    background-color: #361501; /* Wallpaper accent on hover */
+    background-color: #5F5F5C; /* Wallpaper accent on hover */
     background-size: 30%; /* Gentle zoom effect */
 }
 
