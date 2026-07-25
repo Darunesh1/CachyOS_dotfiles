@@ -4,3 +4,9 @@ docs/node_modules/
 docs/.docusaurus/
 docs/.cache-loader/
 docs/build/
+# Wallust generated files
+hypr/hyprlock-colors.conf
+kitty/kitty-theme.conf
+swayosd/style.css
+wlogout/style.css
+zsh/wallust-colors.zsh
