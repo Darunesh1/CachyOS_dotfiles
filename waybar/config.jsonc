@@ -9,7 +9,7 @@
 
 	// ── Layout ─────────────────────────────────────────────────────────────────
 	"modules-left": ["custom/poweroff", "hyprland/workspaces", "hyprland/window"],
-	"modules-center": ["clock"],
+	"modules-center": ["clock", "custom/coffee"],
 	"modules-right": [
 		"custom/updates",
 		"network",
@@ -182,5 +182,13 @@
 		"interval": 1,
 		"format": "{:%H:%M  ·  %a, %d %b}",
 		"tooltip-format": "<big>{:%A, %d %B %Y}</big>\n{:%H:%M:%S}"
+	},
+	// ── Coffee Mode (Prevent Sleep) ───────────────────────────────────────────────
+	"custom/coffee": {
+		"exec": "$HOME/.config/waybar/scripts/coffee-status.sh",
+		"return-type": "json",
+		"interval": 3600,
+		"signal": 8,
+		"on-click": "$HOME/.config/waybar/scripts/coffee-mode.sh"
 	}
 }

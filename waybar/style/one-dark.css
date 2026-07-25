@@ -42,7 +42,8 @@ window#waybar {
 #custom-powerprofile,
 #tray,
 #custom-notification,
-#clock {
+#clock,
+#custom-coffee{
     background: rgba(30, 33, 39, 0.88);
     color: #abb2bf;
     padding: 4px 12px;
@@ -213,4 +214,28 @@ window#waybar {
 /* Safely curve the network module only when updates are hidden */
 .modules-right > widget:first-child > #network {
     border-radius: 10px 0 0 10px;
+}
+/* Coffee Mode */
+#custom-coffee {
+    background: rgba(30, 33, 39, 0.88);   /* Same as every other pill */
+    border-radius: 10px;
+    margin: 4px 0 4px 8px;
+    padding: 3px 12px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* Auto Sleep (default) */
+#custom-coffee.disabled {
+    color: #5c6370;      /* One Dark dim grey */
+}
+
+/* Coffee Mode ON */
+#custom-coffee.enabled {
+    color: #98c379;      /* One Dark green */
+}
+
+/* Hover */
+#custom-coffee:hover {
+    color: #61afef;      /* One Dark blue */
 }
