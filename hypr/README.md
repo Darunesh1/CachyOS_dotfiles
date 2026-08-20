@@ -45,7 +45,7 @@ Modular Hyprland configuration written in **Lua**.
     │   └── battery-notify.sh      # Battery notification daemon
     │
     ├── recording/
-    │   └── screen-record.sh       # Toggle region screen recording
+    │   └── screen-record.sh       # Toggle region screen recording (wf-recorder)
     │
     └── wallpaper/
         └── awww-cycle.sh          # Auto-cycle wallpapers
