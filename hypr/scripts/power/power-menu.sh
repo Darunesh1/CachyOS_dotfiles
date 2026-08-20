@@ -15,10 +15,10 @@
 
 THEME="$HOME/.config/rofi/themes/powermenu.rasi"
 
-lock="  Lock"
+lock="󰌾  Lock"
 suspend="󰒲  Suspend"
 logout="󰍃  Logout"
-reboot="  Reboot"
+reboot="󰜉  Reboot"
 shutdown="⏻  Shutdown"
 
 # rofi commits on Enter, unlike wlogout's click-a-big-button. Anything that

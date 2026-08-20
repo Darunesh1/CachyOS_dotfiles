@@ -10,9 +10,9 @@ configuration {
     show-icons:         true;
     icon-theme:         "Papirus-Dark";
     display-drun:       "󰀻  Apps";
-    display-run:        "  Run";
-    display-window:    "󰖯  Windows";
-    display-filebrowser:"  Files";
+    display-run:        "󰆍  Run";
+    display-window:     "󰖯  Windows";
+    display-filebrowser:"󰉋  Files";
 
     /* behaviour */
     case-sensitive:     false;
