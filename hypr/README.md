@@ -143,6 +143,34 @@ hyprctl eval 'hl.config({ general = { border_size = 4 } })'
 `.luarc.json` points the Lua LSP at the stubs shipped in `/usr/share/hypr/stubs`,
 giving completion and type checking for the whole `hl.*` API.
 
+## Notes
+
+A few things about this setup that are not obvious from the config alone.
+
+**SSH agent.** `SSH_AUTH_SOCK` points at `$XDG_RUNTIME_DIR/gcr/ssh`, served by
+`gcr-ssh-agent.socket`. gnome-keyring no longer provides an ssh-agent (50.0
+accepts only `--components=pkcs11,secrets`), so the old
+`$XDG_RUNTIME_DIR/keyring/ssh` path is dead. If `ssh-add -l` says *Error
+connecting to agent*, the socket is not enabled:
+
+```sh
+systemctl --user enable --now gcr-ssh-agent.socket
+```
+
+**Coffee Mode** (the Waybar toggle) stops and restarts `hypridle` rather than
+signalling it. hypridle handles neither SIGUSR1 nor SIGUSR2, and the default
+disposition of SIGUSR1 is to kill the process -- so signalling it silently
+disabled idle locking and idle-suspend until the next login.
+
+**swaync** is started from `autostart.lua`, so `swaync.service` is masked. Left
+unmasked, D-Bus tries to activate a second copy at login, fails against the bus
+name the first one already holds, and leaves a permanently failed unit.
+
+**Hibernate does not work** on this machine, and the wlogout button for it cannot
+succeed. There is no `resume=` kernel parameter and no `resume` hook in
+`mkinitcpio.conf`, and `/swapfile` (4G) is smaller than RAM (7.4G). Suspend is
+unaffected and works normally.
+
 ## Links
 
 - [Hyprland Wiki](https://wiki.hypr.land/)
