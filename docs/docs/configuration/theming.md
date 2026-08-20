@@ -13,6 +13,11 @@ The pipeline is triggered whenever your wallpaper changes (either manually or vi
     - **SwayOSD**: `~/.config/swayosd/style.css`
     - **Hyprlock**: `~/.config/hypr/hyprlock-colors.conf`
     - **wlogout**: `~/.config/wlogout/style.css`
+    - **Kitty**: `~/.config/kitty/kitty-theme.conf`
+    - **Zsh**: `~/.config/zsh/wallust-colors.zsh`
+
+All five are generated, so they are gitignored and absent from a fresh clone —
+run `wallust run <wallpaper>` once after cloning.
 
 ## Component Breakdown
 

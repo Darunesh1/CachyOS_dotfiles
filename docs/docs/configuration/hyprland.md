@@ -4,15 +4,18 @@ Hyprland is the heart of MyArch. It provides a smooth, dynamic tiling window man
 
 ## Keybindings
 
-MyArch uses the `Super` (Windows) key as the primary modifier (`$mainMod`).
+The Hyprland config is written in **Lua** and lives in `~/.config/hypr/`, with
+`hyprland.lua` requiring the modules under `config/`. MyArch uses the `Super`
+(Windows) key as the primary modifier, defined once as `mainMod` in
+`config/lib.lua`.
 
 | Keybinding | Action |
 |------------|--------|
 | `Super + T` | Open Kitty Terminal |
 | `Super + Q` | Kill Active Window |
-| `Super + M` | Exit Hyprland |
 | `Super + E` | Open File Manager (Thunar) |
-| `Super + V` | Toggle Floating |
+| `Super + W` | Toggle Floating |
+| `Super + V` | Clipboard Manager |
 | `Super + A` | Open Rofi Launcher |
 | `Super + S` | Toggle Special Workspace (Scratchpad) |
 | `Super + L` | Lock Screen (Hyprlock) |
@@ -27,13 +30,14 @@ When you toggle the special workspace (`Super + S`), MyArch applies a **Dim Effe
 1. Your primary windows are darkened to reduce distraction.
 2. **Waybar remains crisp and readable** at the top of the screen.
 
-You can adjust this in `~/.config/hypr/config/appearance.conf`:
+You can adjust this in `~/.config/hypr/config/appearance.lua`:
 
-```hyprlang
-decoration {
-    # ...
-    dim_special = 0.5  # Adjust between 0.0 and 1.0
-}
+```lua
+hl.config({
+    decoration = {
+        dim_special = 0.5, -- Adjust between 0.0 and 1.0
+    },
+})
 ```
 
 ### Window Rules
@@ -43,4 +47,4 @@ MyArch includes several rules to improve the user experience:
 - **XWayland**: Fixes for dragging issues.
 - **Floating Windows**: Specific apps like `pavucontrol` are set to float by default.
 
-Rules are defined in `~/.config/hypr/config/rules.conf`.
+Rules are defined in `~/.config/hypr/config/rules.lua`.
