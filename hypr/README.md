@@ -45,7 +45,8 @@ Modular Hyprland configuration written in **Lua**.
     │   └── battery-notify.sh      # Battery notification daemon
     │
     ├── recording/
-    │   └── screen-record.sh       # Toggle region screen recording (wf-recorder)
+    │   ├── screen-record.sh       # Toggle region screen recording (wf-recorder)
+    │   └── screen-record-hq.sh    # Same, high-quality profile
     │
     └── wallpaper/
         └── awww-cycle.sh          # Auto-cycle wallpapers
@@ -104,6 +105,7 @@ emergency binds: **SUPER+Q** (terminal), **SUPER+R** (run), **SUPER+M** (exit).
 | `Print` | Screenshot full screen |
 | `SUPER + P` | Screenshot selected area |
 | `SUPER + SHIFT + P` | Toggle screen recording |
+| `SUPER + ALT + P` | Toggle high-quality screen recording |
 | `SUPER + R` | Reload Waybar |
 | `SUPER + SHIFT + R` | Reload Hyprland |
 

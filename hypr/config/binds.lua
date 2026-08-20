@@ -77,7 +77,12 @@ hl.bind("Print", hl.dsp.exec_cmd(
 -- ── Screen Recording ────────────────────────────────────────────────────────
 -- First press: select region and start recording
 -- Second press: stop recording and save video
+--
+-- Both share one PID file, so only one recording runs at a time and either
+-- key stops whichever is active.
 hl.bind(mainMod .. " + SHIFT + P", hl.dsp.exec_cmd(L.scripts .. "/recording/screen-record.sh"))
+-- High quality: constant-quality H.264 + lossless FLAC audio in mkv
+hl.bind(mainMod .. " + ALT + P", hl.dsp.exec_cmd(L.scripts .. "/recording/screen-record-hq.sh"))
 
 -- ── Window Cycling (Alt + Tab) ──────────────────────────────────────────────
 -- Cycle through windows in the current workspace.
