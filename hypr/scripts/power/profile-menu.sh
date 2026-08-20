@@ -21,6 +21,6 @@ case "$selected" in
         ~/.config/hypr/scripts/power/hypr-profile.sh performance
         ;;
     "$gamemode")
-        ~/MyArch/hypr/scripts/power/game-mode.sh
+        ~/.config/hypr/scripts/power/game-mode.sh
         ;;
 esac
