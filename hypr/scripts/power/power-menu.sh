@@ -37,8 +37,12 @@ selected=$(printf '%s\n%s\n%s\n%s\n%s\n' \
 
 case "$selected" in
     "$lock")
-        # Same verb hypridle uses, so both paths go through logind.
-        loginctl lock-session
+        # Call hyprlock directly rather than `loginctl lock-session`. The latter
+        # only emits a logind signal, and the thing that listens for it here is
+        # hypridle -- which Coffee Mode deliberately stops. Locking on request
+        # must not depend on idle handling being enabled.
+        # `pidof ||` guards against stacking instances, as hypridle.conf does.
+        pidof hyprlock >/dev/null || hyprlock &
         ;;
     "$suspend")
         systemctl suspend

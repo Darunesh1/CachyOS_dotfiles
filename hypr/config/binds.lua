@@ -18,7 +18,7 @@ local mainMod = L.mainMod
 
 -- ── System ──────────────────────────────────────────────────────────────────
 -- Lock screen
-hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("hyprlock"))
+hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("pidof hyprlock || hyprlock"))
 
 -- Kill active window
 hl.bind(mainMod .. " + Q", hl.dsp.window.close())
@@ -98,7 +98,7 @@ end)
 
 -- ── Laptop Lid Switch ───────────────────────────────────────────────────────
 -- Lock the screen and suspend when the lid is closed
-hl.bind("switch:on:Lid Switch", hl.dsp.exec_cmd("hyprlock"), { locked = true })
+hl.bind("switch:on:Lid Switch", hl.dsp.exec_cmd("pidof hyprlock || hyprlock"), { locked = true })
 hl.bind("switch:on:Lid Switch", hl.dsp.exec_cmd("systemctl suspend"), { locked = true })
 
 
