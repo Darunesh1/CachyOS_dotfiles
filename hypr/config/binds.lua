@@ -25,7 +25,7 @@ hl.bind(mainMod .. " + Q", hl.dsp.window.close())
 hl.bind("ALT + F4", hl.dsp.window.close())
 
 -- Toggle floating
-hl.bind(mainMod .. " + w", hl.dsp.window.float({ action = "toggle" }))
+hl.bind(mainMod .. " + W", hl.dsp.window.float({ action = "toggle" }))
 
 -- Power profile menu
 hl.bind(mainMod .. " + SHIFT + G", hl.dsp.exec_cmd(L.scripts .. "/power/profile-menu.sh"))
