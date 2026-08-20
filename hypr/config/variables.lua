@@ -16,7 +16,10 @@ hl.env("QT_QPA_PLATFORMTHEME", "qt5ct")
 hl.env("QT_QPA_PLATFORM", "wayland;xcb")
 hl.env("ADW_DISABLE_PORTAL", "1")
 
--- SSH socket for keyring
--- Was `env = SSH_AUTH_SOCK,$XDG_RUNTIME_DIR/keyring/ssh`. Lua does not expand
--- shell variables inside strings, so read it explicitly.
-hl.env("SSH_AUTH_SOCK", (os.getenv("XDG_RUNTIME_DIR") or "") .. "/keyring/ssh")
+-- SSH agent socket
+-- This pointed at $XDG_RUNTIME_DIR/keyring/ssh, a socket that is never created:
+-- gnome-keyring dropped its ssh-agent component (50.0 accepts only
+-- `--components=pkcs11,secrets`), so `ssh-add -l` failed with "Error connecting
+-- to agent". The replacement is gcr-ssh-agent.socket, which listens here and
+-- must be enabled with:  systemctl --user enable --now gcr-ssh-agent.socket
+hl.env("SSH_AUTH_SOCK", (os.getenv("XDG_RUNTIME_DIR") or "") .. "/gcr/ssh")

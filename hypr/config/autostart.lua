@@ -31,9 +31,6 @@ hl.on("hyprland.start", function()
     -- For hypridle
     hl.exec_cmd("hypridle")
 
-    -- GNOME Keyring
-    hl.exec_cmd("eval $(gnome-keyring-daemon --start --components=secrets,ssh,pkcs11)")
-
     -- Battery notifications
     hl.exec_cmd(L.scripts .. "/power/battery-notify.sh")
 
