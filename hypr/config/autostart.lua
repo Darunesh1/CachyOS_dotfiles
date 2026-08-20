@@ -42,4 +42,9 @@ hl.on("hyprland.start", function()
 
     -- Automount removable media
     hl.exec_cmd("udiskie --automount --notify")
+
+    -- Polkit authentication agent. Without one, any action whose polkit rule
+    -- is auth_admin (mounting some volumes, loginctl terminate-user, ...) has
+    -- nothing to show a password prompt and fails silently.
+    hl.exec_cmd("/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1")
 end)
