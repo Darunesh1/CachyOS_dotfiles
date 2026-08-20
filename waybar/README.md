@@ -36,7 +36,10 @@ sudo pacman -S ttf-firacode-nerd
 │   └── one-dark.css
 └── scripts/
     ├── updates.sh       ← make executable!
-    └── wifi.sh          ← make executable!
+    ├── intel-gpu.sh     ← make executable!
+    ├── coffee-mode.sh   ← make executable!
+    ├── coffee-status.sh ← make executable!
+    └── launch.sh        ← make executable!
 ```
 
 ## Install

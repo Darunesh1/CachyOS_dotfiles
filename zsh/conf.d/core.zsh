@@ -114,7 +114,15 @@ function _load_compinit() {
 }
 
 function _load_prompt() {
-    source ${ZDOTDIR}/prompt.zsh 2>/dev/null || source ${ZDOTDIR}/conf.d/prompt.zsh 2>/dev/null
+    # $ZDOTDIR/prompt.zsh is an optional user override; conf.d/prompt.zsh is the
+    # default (starship, falling back to powerlevel10k). Test for the override
+    # rather than relying on `source ... || source ...`, which also falls through
+    # when the override exists but errors -- loading both.
+    if [[ -r ${ZDOTDIR}/prompt.zsh ]]; then
+        source ${ZDOTDIR}/prompt.zsh
+    else
+        source ${ZDOTDIR}/conf.d/prompt.zsh
+    fi
 }
 
 # Configuration Variables

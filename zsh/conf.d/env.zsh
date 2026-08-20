@@ -3,6 +3,10 @@
 # Environment Variables Configuration
 # Sets up XDG directories and application paths
 
+# Keep $PATH and $fpath free of duplicates. Without this the prepend below
+# stacks up another ~/.local/bin every time this file is re-sourced.
+typeset -U path PATH fpath
+
 # Basic PATH prepending
 PATH="$HOME/.local/bin:$PATH"
 
