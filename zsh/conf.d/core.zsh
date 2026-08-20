@@ -152,8 +152,9 @@ if [[ ${ZSH_NO_PLUGINS} != "1" ]]; then
     if [[ "$ZSH_OMZ_DEFER" == "1" ]] && [[ -r $ZSH/oh-my-zsh.sh ]]; then
         _load_deferred_plugin_system
         _load_prompt
-    elif source $ZDOTDIR/plugin.zsh >/dev/null 2>&1; then
-        source $ZDOTDIR/plugin.zsh
+    # The condition sources the file, so do NOT source it again in the body --
+    # that loaded every zinit plugin twice on each interactive shell.
+    elif [[ -r $ZDOTDIR/plugin.zsh ]] && source $ZDOTDIR/plugin.zsh; then
         _load_prompt
         _load_functions
         _load_completions
