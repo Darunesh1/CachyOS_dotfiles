@@ -53,8 +53,10 @@ hl.bind(mainMod .. " + F", hl.dsp.window.fullscreen())                          
 hl.bind(mainMod .. " + SHIFT + F", hl.dsp.window.fullscreen({ mode = "maximized" })) -- true fullscreen
 
 
--- ── Power Menu (wlogout) ────────────────────────────────────────────────────
-hl.bind("CTRL + ALT + Delete", hl.dsp.exec_cmd("wlogout"))
+-- ── Power Menu ──────────────────────────────────────────────────────────────
+-- rofi, like every other menu here. Replaced wlogout, whose Suspend button
+-- never actually ran its command and whose Logout needed polkit admin auth.
+hl.bind("CTRL + ALT + Delete", hl.dsp.exec_cmd(L.scripts .. "/power/power-menu.sh"))
 
 
 -- ── Reload Controls ─────────────────────────────────────────────────────────

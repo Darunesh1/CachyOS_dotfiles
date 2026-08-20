@@ -20,7 +20,7 @@ Install the necessary components using `pacman`:
 
 ```bash
 # Core components
-sudo pacman -S hyprland waybar kitty rofi hyprlock wlogout
+sudo pacman -S hyprland waybar kitty rofi hyprlock
 
 # Utilities
 sudo pacman -S grim slurp wl-clipboard cliphist playerctl brightnessctl intel-gpu-tools
@@ -57,7 +57,6 @@ ln -s $(pwd)/kitty ~/.config/kitty
 ln -s $(pwd)/rofi ~/.config/rofi
 ln -s $(pwd)/swayosd ~/.config/swayosd
 ln -s $(pwd)/wallust ~/.config/wallust
-ln -s $(pwd)/wlogout ~/.config/wlogout
 ```
 
 ## Step 4: Generate the Theme
@@ -69,7 +68,7 @@ kept in the repository, so you must run it **once** before first launch:
 wallust run ~/Pictures/Wallpaper/your-wallpaper.jpg
 ```
 
-This writes the colour files for Hyprlock, Kitty, SwayOSD, wlogout and Zsh. It
+This writes the colour files for Hyprlock, Kitty, SwayOSD, Rofi and Zsh. It
 matters most for Hyprlock, whose config uses `source =` on the generated file — a
 hard error if it is missing, which would leave you unable to theme the lock screen.
 

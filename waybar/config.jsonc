@@ -26,11 +26,11 @@
 	],
 
 	// ── Power button ─────────────────────────────────────────────────────────────
-	// Requires: wlogout  →  sudo pacman -S wlogout
+	// Opens the Rofi power menu (hypr/scripts/power/power-menu.sh)
 	"custom/poweroff": {
 		"format": "⏻",
 		"tooltip": false,
-		"on-click": "wlogout"
+		"on-click": "$HOME/.config/hypr/scripts/power/power-menu.sh"
 	},
 
 	// ── Workspaces ───────────────────────────────────────────────────────────────

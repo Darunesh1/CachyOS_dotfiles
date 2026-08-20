@@ -7,7 +7,7 @@ A modern, minimalist, and highly dynamic Hyprland configuration for Arch Linux.
 
 ## ✨ Features
 
-- 🎨 **Dynamic Theming**: Entire system colors (Hyprland, Waybar, SwayOSD, Hyprlock, wlogout) automatically adapt to your wallpaper via `wallust`.
+- 🎨 **Dynamic Theming**: Entire system colors (Hyprland, Waybar, SwayOSD, Hyprlock, Rofi, Kitty, Zsh) automatically adapt to your wallpaper via `wallust`.
 - 🚀 **Performance Optimized**: High-performance continuous GPU usage tracking and native Waybar modules for zero-overhead monitoring.
 - 🌫️ **Focus Mode**: Custom "Special Workspace Dim" effect ensures maximum productivity without blurring your status bar.
 - 🛠️ **Fully Automated**: Automated wallpaper cycling with smooth transitions and instant theme synchronization.
@@ -30,7 +30,6 @@ For detailed setup instructions and configuration guides, visit the **[MyArch Do
 | **SwayOSD** | Polished, dynamically themed on-screen displays for volume and brightness. |
 | **Wallust** | The engine behind the wallpaper-based color generation. |
 | **Hyprlock** | Secure and aesthetically synced lock screen. |
-| **wlogout** | Modern, transparent power menu. |
 
 ## 🚀 Quick Install
 
@@ -45,7 +44,6 @@ ln -s $(pwd)/waybar ~/.config/waybar
 ln -s $(pwd)/kitty ~/.config/kitty
 ln -s $(pwd)/swayosd ~/.config/swayosd
 ln -s $(pwd)/wallust ~/.config/wallust
-ln -s $(pwd)/wlogout ~/.config/wlogout
 ```
 
 See the [full installation guide](https://darriour.github.io/MyArch/installation) for full dependency list and detailed setup.

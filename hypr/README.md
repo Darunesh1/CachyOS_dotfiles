@@ -99,7 +99,7 @@ emergency binds: **SUPER+Q** (terminal), **SUPER+R** (run), **SUPER+M** (exit).
 | `SUPER + scroll` | Cycle workspaces |
 | `SUPER + LMB / RMB` | Move / resize window |
 | `SUPER + L` | Lock screen |
-| `Ctrl + Alt + Delete` | Power menu (wlogout) |
+| `Ctrl + Alt + Delete` | Power menu (Rofi) |
 | `SUPER + SHIFT + G` | Power profile menu |
 | `SUPER + CTRL + S` | Screen shader menu |
 | `Print` | Screenshot full screen |
@@ -166,10 +166,16 @@ disabled idle locking and idle-suspend until the next login.
 unmasked, D-Bus tries to activate a second copy at login, fails against the bus
 name the first one already holds, and leaves a permanently failed unit.
 
-**Hibernate does not work** on this machine, and the wlogout button for it cannot
-succeed. There is no `resume=` kernel parameter and no `resume` hook in
-`mkinitcpio.conf`, and `/swapfile` (4G) is smaller than RAM (7.4G). Suspend is
-unaffected and works normally.
+**The power menu is Rofi** (`scripts/power/power-menu.sh`), not wlogout. Logout
+runs `hyprctl dispatch exit` rather than `loginctl terminate-user`, which polkit
+rates `auth_admin_keep` and would demand a password just to log out. Shutdown,
+Reboot and Logout ask for confirmation first, because Rofi commits on Enter;
+Lock and Suspend do not, being harmless.
+
+**Hibernate is deliberately absent** from that menu. It cannot resume on this
+machine: no `resume=` kernel parameter, no `resume` hook in `mkinitcpio.conf`,
+and `/swapfile` (4G) is smaller than RAM (7.4G). Suspend is unaffected and works
+normally. Fix the initramfs and swap first, then add the entry back.
 
 ## Links
 

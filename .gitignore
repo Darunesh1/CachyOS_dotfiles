@@ -8,5 +8,5 @@ docs/build/
 hypr/hyprlock-colors.conf
 kitty/kitty-theme.conf
 swayosd/style.css
-wlogout/style.css
 zsh/wallust-colors.zsh
+rofi/themes/colours.rasi
