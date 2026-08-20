@@ -142,7 +142,12 @@
 	"custom/powerprofile": {
 		"exec": "$HOME/.config/hypr/scripts/power/powerprofile-status.sh",
 		"return-type": "json",
-		"interval": 3,
+		// Signal-driven, like custom/coffee above. This used to poll every 3s,
+		// spawning a 90ms script ~28,800 times a day to redraw an icon that only
+		// changes when you change the profile. The power scripts now send
+		// SIGRTMIN+9 after switching, so the update is instant AND free.
+		"interval": 3600,
+		"signal": 9,
 		"format": "{}",
 		"on-click": "$HOME/.config/hypr/scripts/power/profile-menu.sh",
 		"tooltip": true
@@ -181,7 +186,10 @@
 	"clock": {
 		"interval": 1,
 		"format": "{:%H:%M  ·  %a, %d %b}",
-		"tooltip-format": "<big>{:%A, %d %B %Y}</big>\n{:%H:%M:%S}"
+		// Both placeholders must name arg 0 explicitly. With two auto-indexed
+		// "{}"s, fmt advances to arg 1, which the clock module never supplies --
+		// logging "invalid arg-id in format string" once every second.
+		"tooltip-format": "<big>{0:%A, %d %B %Y}</big>\n{0:%H:%M:%S}"
 	},
 	// ── Coffee Mode (Prevent Sleep) ───────────────────────────────────────────────
 	"custom/coffee": {

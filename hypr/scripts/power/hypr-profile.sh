@@ -66,3 +66,7 @@ case $MODE in
         exit 1
         ;;
 esac
+
+# Tell Waybar to refresh its power-profile module now. It no longer polls,
+# so without this the icon would sit stale until the hourly fallback tick.
+pkill -SIGRTMIN+9 waybar

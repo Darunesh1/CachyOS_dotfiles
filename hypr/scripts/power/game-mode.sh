@@ -17,6 +17,7 @@ if [ -f "$STATE_FILE" ]; then
     rm "$STATE_FILE"
 
     notify-send "Game Mode" "Disabled ❌"
+    pkill -SIGRTMIN+9 waybar
     exit 0
 fi
 
@@ -44,6 +45,7 @@ export MESA_GLTHREAD=true
 export MESA_NO_ERROR=1
 
 notify-send "Game Mode" "Enabled 🎮"
+pkill -SIGRTMIN+9 waybar
 
 # Optional: launch something automatically (commented)
 # mangohud gamemoderun ryujinx
