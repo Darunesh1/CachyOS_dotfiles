@@ -3,6 +3,9 @@
 /* Layout: left = wallpaper + vertical buttons  ·  right = search + list     */
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
+/* Palette comes from wallust; see wallust/templates/rofi.rasi in the repo. */
+@import "colours.rasi"
+
 configuration {
     modes:              "drun,run,window";
     show-icons:         true;
@@ -14,16 +17,6 @@ configuration {
 
 /* ── Colour tokens ──────────────────────────────────────────────────────── */
 * {
-    bg0:        #1e2127f0;
-    bg1:        #282c34f0;
-    border-col: #3e4452;
-    fg0:        #abb2bf;
-    fg1:        #5c6370;
-    accent:     #c678dd;
-    selected-bg:#a187b580; /* Lighter purple tint to match your screenshot */
-    
-    font:       "JetBrainsMono Nerd Font 12";
-    
     background-color: transparent;
     text-color:       @fg0;
     border:           0;

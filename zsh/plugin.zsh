@@ -10,9 +10,6 @@ ZINIT_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}/zinit/zinit.git"
 [ ! -d $ZINIT_HOME/.git ] && git clone https://github.com/zdharma-continuum/zinit.git "$ZINIT_HOME"
 source "${ZINIT_HOME}/zinit.zsh"
 
-# Custom prompt
-zinit snippet $ZDOTDIR/prompt.zsh
-
 # Plugin: history-search-multi-word
 zinit load zdharma-continuum/history-search-multi-word
 

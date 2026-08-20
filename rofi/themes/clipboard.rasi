@@ -2,20 +2,14 @@
 /* clipboard.rasi  —  cliphist picker                                        */
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
+/* Palette comes from wallust; see wallust/templates/rofi.rasi in the repo. */
+@import "colours.rasi"
+
 configuration {
     display-dmenu: "󰅍  Clip";
 }
 
 * {
-    bg0:        #1e2127f2;
-    bg1:        #282c34f2;
-    border-col: #3e4452;
-    fg0:        #abb2bf;
-    fg1:        #5c6370;
-    accent:     #c678dd;
-    selected-bg:#3b2a4a;
-    font:       "JetBrainsMono Nerd Font 12";
-
     background-color: transparent;
     text-color:       @fg0;
     border:           0;

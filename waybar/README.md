@@ -12,7 +12,6 @@ sudo pacman -S waybar
 sudo pacman -S pacman-contrib      # provides checkupdates
 
 # For power/logout menu
-sudo pacman -S wlogout
 
 # For volume control popup
 sudo pacman -S pavucontrol
@@ -36,7 +35,10 @@ sudo pacman -S ttf-firacode-nerd
 │   └── one-dark.css
 └── scripts/
     ├── updates.sh       ← make executable!
-    └── wifi.sh          ← make executable!
+    ├── intel-gpu.sh     ← make executable!
+    ├── coffee-mode.sh   ← make executable!
+    ├── coffee-status.sh ← make executable!
+    └── launch.sh        ← make executable!
 ```
 
 ## Install
@@ -78,5 +80,5 @@ pkill waybar && waybar &
 - Adjust `"thermal-zone"` in config.jsonc accordingly
 
 ### Power button (⏻)
-- Opens `wlogout` — a graphical logout/reboot/shutdown picker
+- Opens the Rofi power menu (`hypr/scripts/power/power-menu.sh`)
 - Hover turns it red as a safety cue

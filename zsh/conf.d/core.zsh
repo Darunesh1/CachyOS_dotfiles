@@ -114,7 +114,15 @@ function _load_compinit() {
 }
 
 function _load_prompt() {
-    source ${ZDOTDIR}/prompt.zsh 2>/dev/null || source ${ZDOTDIR}/conf.d/prompt.zsh 2>/dev/null
+    # $ZDOTDIR/prompt.zsh is an optional user override; conf.d/prompt.zsh is the
+    # default (starship, falling back to powerlevel10k). Test for the override
+    # rather than relying on `source ... || source ...`, which also falls through
+    # when the override exists but errors -- loading both.
+    if [[ -r ${ZDOTDIR}/prompt.zsh ]]; then
+        source ${ZDOTDIR}/prompt.zsh
+    else
+        source ${ZDOTDIR}/conf.d/prompt.zsh
+    fi
 }
 
 # Configuration Variables
@@ -152,8 +160,9 @@ if [[ ${ZSH_NO_PLUGINS} != "1" ]]; then
     if [[ "$ZSH_OMZ_DEFER" == "1" ]] && [[ -r $ZSH/oh-my-zsh.sh ]]; then
         _load_deferred_plugin_system
         _load_prompt
-    elif source $ZDOTDIR/plugin.zsh >/dev/null 2>&1; then
-        source $ZDOTDIR/plugin.zsh
+    # The condition sources the file, so do NOT source it again in the body --
+    # that loaded every zinit plugin twice on each interactive shell.
+    elif [[ -r $ZDOTDIR/plugin.zsh ]] && source $ZDOTDIR/plugin.zsh; then
         _load_prompt
         _load_functions
         _load_completions

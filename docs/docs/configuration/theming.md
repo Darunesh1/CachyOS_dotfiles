@@ -12,7 +12,12 @@ The pipeline is triggered whenever your wallpaper changes (either manually or vi
 4.  **Distribution**: The generated configurations are sent to their respective locations:
     - **SwayOSD**: `~/.config/swayosd/style.css`
     - **Hyprlock**: `~/.config/hypr/hyprlock-colors.conf`
-    - **wlogout**: `~/.config/wlogout/style.css`
+    - **Rofi**: `~/.config/rofi/themes/colours.rasi`
+    - **Kitty**: `~/.config/kitty/kitty-theme.conf`
+    - **Zsh**: `~/.config/zsh/wallust-colors.zsh`
+
+All five are generated, so they are gitignored and absent from a fresh clone —
+run `wallust run <wallpaper>` once after cloning.
 
 ## Component Breakdown
 
@@ -28,11 +33,12 @@ The lock screen colors are synced via a dedicated color file.
 - The **Clock** and **Battery** label match your wallpaper's foreground color.
 - The **Password Input** field adapts its inner color to your wallpaper's background.
 
-### wlogout (Power Menu)
+### Rofi (Launcher, Clipboard, Shaders, Power Menu)
 
-The power menu uses your wallpaper's background with a subtle transparency effect.
-- **Buttons** use a darkened version of your theme.
-- **Hover effects** highlight buttons with your wallpaper's accent color.
+Every Rofi menu imports a single generated palette, so they all share one look.
+- **Themes** in `~/.config/rofi/themes/` each begin with `@import "colours.rasi"`.
+- **Selection** is highlighted with your wallpaper's accent color.
+- Adding a new menu means writing its layout only — the colors come for free.
 
 ## Triggering a Manual Sync
 
