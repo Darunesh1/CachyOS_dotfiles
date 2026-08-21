@@ -63,5 +63,13 @@ hl.config({
     misc = {
         force_default_wallpaper = 0,    -- Set to 0 or 1 to disable the anime mascot wallpapers
         disable_hyprland_logo   = true, -- If true disables the random hyprland logo / anime girl background. :(
+
+        -- Alt+Tab used to drop out of fullscreen. Nothing was wrong with the
+        -- bind: this option decides what happens when a tiled window asks for
+        -- focus while another is fullscreen, and its stock value is 2
+        -- (exit_fullscreen). 1 (take_over) hands the fullscreen to whichever
+        -- window you cycle to, so cycling swaps windows without ever leaving
+        -- fullscreen. Applies to every focus change, arrow keys included.
+        on_focus_under_fullscreen = 1,
     },
 })
