@@ -98,6 +98,10 @@ hl.bind("ALT + Tab", function()
     hl.dispatch(hl.dsp.window.bring_to_top())
 end)
 
+-- ALT + Tab stays inside the current workspace; SUPER + Tab is the wide view:
+-- every window on every workspace, with the workspace it lives on.
+hl.bind(mainMod .. " + Tab", hl.dsp.exec_cmd(L.scripts .. "/rofi/window-switcher.sh"))
+
 
 -- ── Laptop Lid Switch ───────────────────────────────────────────────────────
 -- Lock the screen and suspend when the lid is closed
