@@ -25,6 +25,9 @@ sudo pacman -S hyprland waybar kitty rofi hyprlock
 # Utilities
 sudo pacman -S grim slurp wl-clipboard cliphist playerctl brightnessctl intel-gpu-tools
 
+# fd powers the Super + Shift + E file finder; jq is used by the rofi menus
+sudo pacman -S fd jq
+
 # Optional but recommended
 sudo pacman -S thunar firefox pavucontrol
 ```

@@ -48,6 +48,10 @@ Modular Hyprland configuration written in **Lua**.
     │   ├── screen-record.sh       # Toggle region screen recording (wf-recorder)
     │   └── screen-record-hq.sh    # Same, high-quality profile
     │
+    ├── rofi/
+    │   ├── find-file.sh           # Find a file by name and open it (needs fd)
+    │   └── window-switcher.sh     # Pick any window on any workspace
+    │
     └── wallpaper/
         └── awww-cycle.sh          # Auto-cycle wallpapers
 ```
@@ -79,6 +83,7 @@ emergency binds: **SUPER+Q** (terminal), **SUPER+R** (run), **SUPER+M** (exit).
 |-----|--------|
 | `SUPER + T` | Open terminal |
 | `SUPER + E` | Open file manager |
+| `SUPER + SHIFT + E` | Find a file by name (rofi, needs `fd`) |
 | `SUPER + B` | Open Firefox |
 | `SUPER + A` | Open app launcher (rofi) |
 | `SUPER + .` | Emoji picker |
@@ -90,7 +95,8 @@ emergency binds: **SUPER+Q** (terminal), **SUPER+R** (run), **SUPER+M** (exit).
 | `SUPER + SHIFT + F` | Maximize |
 | `SUPER + J` | Toggle split (dwindle) |
 | `SUPER + SHIFT + W` | Toggle pseudotile (dwindle) |
-| `ALT + Tab` | Cycle windows |
+| `ALT + Tab` | Cycle windows in the current workspace (stays fullscreen) |
+| `SUPER + Tab` | Switch to any window on any workspace (rofi) |
 | `SUPER + arrows` | Move focus |
 | `SUPER + [0-9]` | Switch workspace |
 | `SUPER + SHIFT + [0-9]` | Move window to workspace |
@@ -171,6 +177,19 @@ runs `hyprctl dispatch exit` rather than `loginctl terminate-user`, which polkit
 rates `auth_admin_keep` and would demand a password just to log out. Shutdown,
 Reboot and Logout ask for confirmation first, because Rofi commits on Enter;
 Lock and Suspend do not, being harmless.
+
+**Alt+Tab keeps fullscreen** because of `misc:on_focus_under_fullscreen = 1` in
+`appearance.lua`, not because of anything in the bind. That option decides what
+happens when a tiled window asks for focus while another is fullscreen, and its
+stock value is `2` (`exit_fullscreen`) -- which tore the fullscreen down on
+every cycle. `1` (`take_over`) hands the fullscreen to whichever window you
+cycle to instead. It applies to every focus change, arrow keys included.
+
+**The two Tab binds are different tools.** `ALT + Tab` cycles within the current
+workspace via `cyclenext`. `SUPER + Tab` opens a Rofi list of every window on
+every workspace, built from `hyprctl clients` rather than Rofi's own `window`
+mode -- that mode works here over wlr-foreign-toplevel, but the protocol carries
+no workspace information.
 
 **Hibernate is deliberately absent** from that menu. It cannot resume on this
 machine: no `resume=` kernel parameter, no `resume` hook in `mkinitcpio.conf`,

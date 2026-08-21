@@ -14,6 +14,9 @@ The Hyprland config is written in **Lua** and lives in `~/.config/hypr/`, with
 | `Super + T` | Open Kitty Terminal |
 | `Super + Q` | Kill Active Window |
 | `Super + E` | Open File Manager (Thunar) |
+| `Super + Shift + E` | Find a File by Name (Rofi) |
+| `Super + Tab` | Switch Window Across All Workspaces (Rofi) |
+| `Alt + Tab` | Cycle Windows in the Current Workspace |
 | `Super + W` | Toggle Floating |
 | `Super + V` | Clipboard Manager |
 | `Super + A` | Open Rofi Launcher |
