@@ -37,6 +37,9 @@ hl.bind(mainMod .. " + CTRL + S", hl.dsp.exec_cmd(L.scripts .. "/shader-menu.sh"
 -- ── Applications ────────────────────────────────────────────────────────────
 hl.bind(mainMod .. " + T", hl.dsp.exec_cmd(L.terminal))
 hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(L.fileManager))
+-- Find a file by name and open it. Sits next to the file manager on purpose:
+-- E opens the tree, SHIFT + E searches it.
+hl.bind(mainMod .. " + SHIFT + E", hl.dsp.exec_cmd(L.scripts .. "/rofi/find-file.sh"))
 hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("firefox"))
 hl.bind(mainMod .. " + A", hl.dsp.exec_cmd(L.menu))
 -- ── Emoji Picker ────────────────────────────────────────────────────────────

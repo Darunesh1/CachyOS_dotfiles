@@ -1,0 +1,101 @@
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/* finder.rasi  —  fuzzy file finder (SUPER + SHIFT + E)                       */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Palette comes from wallust; see wallust/templates/rofi.rasi in the repo. */
+@import "colours.rasi"
+
+configuration {
+    display-dmenu: "󰍉  Find";
+}
+
+* {
+    background-color: transparent;
+    text-color:       @fg0;
+    border:           0;
+    margin:           0;
+    padding:          0;
+    spacing:          0;
+}
+
+/* Wider than the clipboard picker: rows here are file paths, and truncating
+   the middle of a path is what makes a finder useless. */
+window {
+    width:            900px;
+    background-color: @bg0;
+    border:           1px;
+    border-color:     @border-col;
+    border-radius:    12px;
+}
+
+mainbox {
+    orientation:      vertical;
+    spacing:          0;
+    children:         [ inputbar, listview ];
+}
+
+inputbar {
+    orientation:      horizontal;
+    background-color: @bg1;
+    border-radius:    12px 12px 0 0;
+    padding:          10px 14px;
+    spacing:          10px;
+    border:           0 0 1px 0;
+    border-color:     @border-col;
+    children:         [ prompt, entry ];
+    expand:           false;
+}
+
+prompt {
+    text-color:       @accent;
+    font:             "JetBrainsMono Nerd Font Bold 13";
+    vertical-align:   0.5;
+}
+
+entry {
+    text-color:       @fg0;
+    placeholder:      "Search files…";
+    placeholder-color:@fg1;
+    cursor:           text;
+    vertical-align:   0.5;
+    expand:           true;
+}
+
+/* 12 lines rather than 8 — a name search usually has more near-misses worth
+   scanning than a clipboard history does. */
+listview {
+    layout:           vertical;
+    spacing:          1px;
+    padding:          8px;
+    lines:            12;
+    scrollbar:        false;
+    fixed-height:     false;
+    dynamic:          true;
+}
+
+element {
+    orientation:      horizontal;
+    border-radius:    8px;
+    padding:          7px 12px;
+    cursor:           pointer;
+}
+
+element normal normal    { text-color: @fg0; }
+element alternate normal { text-color: @fg0; }
+
+element selected normal {
+    background-color: @selected-bg;
+    text-color:       @fg0;
+    border:           0 0 0 2px;
+    border-color:     @accent;
+}
+
+element selected active {
+    background-color: @selected-bg;
+    text-color:       @accent;
+}
+
+element-text {
+    vertical-align:   0.5;
+    text-color:       inherit;
+}
