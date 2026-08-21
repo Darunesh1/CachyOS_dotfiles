@@ -71,4 +71,8 @@ idx=$(build_menu | rofi -dmenu -i -format i -p "󰖯  Windows" -theme "$THEME")
 # Empty on Escape; non-numeric if rofi hands back unmatched custom input.
 [[ "$idx" =~ ^[0-9]+$ ]] || exit 0
 
-hyprctl dispatch focuswindow "address:${addrs[$idx]}" >/dev/null
+# Lua syntax, not the old `hyprctl dispatch focuswindow address:0x...`. Under the
+# Lua config manager hyprctl wraps its dispatch argument in hl.dispatch(...) and
+# evaluates it as Lua, so the hyprlang form is a syntax error -- the same trap as
+# `hyprctl keyword`, which had to become `hyprctl eval`.
+hyprctl dispatch "hl.dsp.focus({ window = \"address:${addrs[$idx]}\" })" >/dev/null

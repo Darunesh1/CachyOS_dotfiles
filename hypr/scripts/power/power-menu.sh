@@ -48,7 +48,10 @@ case "$selected" in
         systemctl suspend
         ;;
     "$logout")
-        confirm "log out" && hyprctl dispatch exit
+        # Lua syntax: hyprctl wraps its dispatch argument in hl.dispatch() and
+        # evaluates it as Lua, and there is no global named `exit`, so the old
+        # `hyprctl dispatch exit` silently failed.
+        confirm "log out" && hyprctl dispatch 'hl.dsp.exit()'
         ;;
     "$reboot")
         confirm "reboot" && systemctl reboot
