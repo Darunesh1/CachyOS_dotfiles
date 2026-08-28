@@ -18,7 +18,7 @@ The Hyprland config is written in **Lua** and lives in `~/.config/hypr/`, with
 | `Super + Tab` | Switch Window Across All Workspaces (Rofi) |
 | `Alt + Tab` | Cycle Windows in the Current Workspace |
 | `Super + W` | Toggle Floating |
-| `Super + V` | Clipboard Manager |
+| `Super + V` | Clipboard History (`Ctrl + Shift + Del` clears it) |
 | `Super + A` | Open Rofi Launcher |
 | `Super + S` | Toggle Special Workspace (Scratchpad) |
 | `Super + L` | Lock Screen (Hyprlock) |
