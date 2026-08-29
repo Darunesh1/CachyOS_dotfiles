@@ -163,6 +163,9 @@ connecting to agent*, the socket is not enabled:
 systemctl --user enable --now gcr-ssh-agent.socket
 ```
 
+Stage 8 of `install.sh` enables this for you, and `./install.sh --check` reports
+whether the socket is active.
+
 **Coffee Mode** (the Waybar toggle) stops and restarts `hypridle` rather than
 signalling it. hypridle handles neither SIGUSR1 nor SIGUSR2, and the default
 disposition of SIGUSR1 is to kill the process -- so signalling it silently
@@ -170,7 +173,9 @@ disabled idle locking and idle-suspend until the next login.
 
 **swaync** is started from `autostart.lua`, so `swaync.service` is masked. Left
 unmasked, D-Bus tries to activate a second copy at login, fails against the bus
-name the first one already holds, and leaves a permanently failed unit.
+name the first one already holds, and leaves a permanently failed unit. Stage 8
+of `install.sh` masks it; `./install.sh --check` warns if it ever comes back
+unmasked.
 
 **The power menu is Rofi** (`scripts/power/power-menu.sh`), not wlogout. Logout
 runs `hyprctl dispatch exit` rather than `loginctl terminate-user`, which polkit

@@ -1,0 +1,61 @@
+# Official-repository packages for MyArch.
+#
+# Single source of truth: install.sh reads this file, and the docs point here
+# rather than listing names in prose. One package per line; blank lines and
+# lines starting with # are ignored. Trailing comments are stripped.
+
+# ── Compositor & session ────────────────────────────────────────────────────
+hyprland                # the compositor itself (Lua config needs >= 0.55)
+hyprlock                # lock screen (hypr/hyprlock.conf)
+hypridle                # idle daemon (hypr/hypridle.conf, Coffee Mode toggle)
+waybar                  # status bar, must be built with Hyprland support
+swaync                  # notifications; started from autostart.lua
+swayosd                 # volume/brightness OSD, themed by wallust
+
+# ── Terminal, launcher, file manager ────────────────────────────────────────
+kitty                   # terminal (lib.lua M.terminal)
+rofi-wayland            # launcher, clipboard, power menu, window switcher
+thunar                  # file manager (lib.lua M.fileManager)
+
+# ── Screenshot, recording, clipboard ────────────────────────────────────────
+grim                    # screenshots (Print, SUPER+P)
+slurp                   # region select for screenshots and recording
+wl-clipboard            # wl-copy / wl-paste
+cliphist                # clipboard history (SUPER+V)
+wf-recorder             # screen recording (SUPER+SHIFT+P)
+
+# ── Media & hardware keys ───────────────────────────────────────────────────
+playerctl               # media keys
+brightnessctl           # waybar backlight scroll
+power-profiles-daemon   # powerprofilesctl, the SUPER+SHIFT+G menu
+intel-gpu-tools         # intel_gpu_top, for waybar's custom/gpu module
+
+# ── Scripts & waybar modules ────────────────────────────────────────────────
+fd                      # SUPER+SHIFT+E file finder (hard requirement)
+jq                      # SUPER+Tab window switcher
+pacman-contrib          # checkupdates, for waybar's custom/updates module
+udiskie                 # removable media automount
+polkit-gnome            # authentication agent; without it auth_admin fails silently
+gcr                     # gcr-ssh-agent.socket -> $XDG_RUNTIME_DIR/gcr/ssh
+xdg-user-dirs           # xdg-user-dir, used by zsh/conf.d/env.zsh
+
+# ── Applications ────────────────────────────────────────────────────────────
+firefox                 # SUPER+B
+pavucontrol             # waybar pulseaudio on-click
+nm-connection-editor    # waybar network on-click
+
+# ── Theming ─────────────────────────────────────────────────────────────────
+ttf-jetbrains-mono-nerd # the font every component asks for by name
+papirus-icon-theme      # row icons in the rofi window switcher
+adwaita-icon-theme      # GTK_THEME=Adwaita:dark, XCURSOR_THEME=Adwaita
+qt5ct                   # QT_QPA_PLATFORMTHEME=qt5ct
+
+# ── Shell ───────────────────────────────────────────────────────────────────
+zsh                     # the shell this config is for
+git                     # required by zsh/plugin.zsh to bootstrap zinit
+starship                # preferred prompt (conf.d/prompt.zsh)
+fzf                     # zsh/completions/fzf.zsh, fzf-tab plugin
+bat                     # zsh/functions/bat.zsh
+eza                     # zsh/functions/eza.zsh
+duf                     # zsh/functions/duf.zsh
+neovim                  # $EDITOR / $VISUAL (zsh/.zshrc)
