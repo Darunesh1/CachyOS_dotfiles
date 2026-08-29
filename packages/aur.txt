@@ -1,0 +1,10 @@
+# AUR packages for MyArch. Installed with yay or paru by install.sh.
+#
+# Same format as pacman.txt: one per line, # comments, trailing comments
+# stripped.
+
+awww                    # wallpaper daemon. NOT "awww-daemon" -- that is the
+                        # binary name, the package is "awww" and ships both
+                        # awww and awww-daemon.
+wallust-git             # the colour-generation engine behind all the theming
+rofimoji                # emoji picker (SUPER+.)

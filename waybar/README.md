@@ -2,27 +2,16 @@
 
 ## Dependencies
 
-Install these before reloading waybar:
+Waybar's packages are part of the repo-wide manifest, not a separate list --
+`packages/pacman.txt` is the single source of truth and `install.sh` reads it.
+The entries this bar depends on are `waybar`, `pacman-contrib` (for
+`checkupdates`), `intel-gpu-tools` (`intel_gpu_top`), `power-profiles-daemon`,
+`pavucontrol`, `nm-connection-editor`, `swaync` and `ttf-jetbrains-mono-nerd`.
+
+To check what is actually installed:
 
 ```bash
-# Core
-sudo pacman -S waybar
-
-# For update counter
-sudo pacman -S pacman-contrib      # provides checkupdates
-
-# For power/logout menu
-
-# For volume control popup
-sudo pacman -S pavucontrol
-
-# For network editor
-sudo pacman -S nm-connection-editor
-
-# Nerd Font (pick one)
-sudo pacman -S ttf-jetbrains-mono-nerd
-# or
-sudo pacman -S ttf-firacode-nerd
+./install.sh --check
 ```
 
 ## File structure
@@ -34,25 +23,21 @@ sudo pacman -S ttf-firacode-nerd
 ├── style/
 │   └── one-dark.css
 └── scripts/
-    ├── updates.sh       ← make executable!
-    ├── intel-gpu.sh     ← make executable!
-    ├── coffee-mode.sh   ← make executable!
-    ├── coffee-status.sh ← make executable!
-    └── launch.sh        ← make executable!
+    ├── updates.sh
+    ├── intel-gpu.sh
+    ├── coffee-mode.sh
+    ├── coffee-status.sh
+    └── launch.sh
 ```
+
+All scripts are already mode 755 in git, so there is no `chmod` step.
 
 ## Install
 
-```bash
-# Copy files
-cp -r . ~/.config/waybar/
+`./install.sh` at the repo root symlinks `~/.config/waybar` here, so edits in
+the repo take effect directly -- no copying.
 
-# Make scripts executable
-chmod +x ~/.config/waybar/scripts/*.sh
-
-# Reload waybar (kill & restart, or via hyprland)
-pkill waybar && waybar &
-```
+To reload after a change: **SUPER + R**, or `./scripts/launch.sh`.
 
 ## Notes
 

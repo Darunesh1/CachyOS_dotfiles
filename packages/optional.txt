@@ -1,0 +1,21 @@
+# Optional packages. install.sh prompts for these separately -- nothing here is
+# needed for a working setup, and every consumer guards with `command -v`.
+#
+# Lines are "package<TAB>repo|aur<TAB>reason" so the installer knows where each
+# one comes from.
+
+# ── ocr-snipper build dependencies ──────────────────────────────────────────
+# Only needed if you install the ALT+X OCR snipper (stage 9). It is a Rust
+# project using leptess, which binds Tesseract through bindgen -- hence clang.
+rustup	repo	cargo, to build ocr-snipper
+clang	repo	bindgen needs libclang to generate the leptess bindings
+tesseract	repo	the OCR engine itself
+tesseract-data-eng	repo	English training data; without it OCR returns nothing
+leptonica	repo	image library leptess links against
+
+# ── Shell niceties ──────────────────────────────────────────────────────────
+# zsh/user.zsh tries these in order for its startup banner, then gives up
+# quietly. Purely cosmetic.
+fastfetch	repo	system info banner (uses kitty image protocol)
+pokego	aur	pokemon sprite banner, preferred over fastfetch
+zsh-theme-powerlevel10k	repo	prompt fallback if you would rather not use starship

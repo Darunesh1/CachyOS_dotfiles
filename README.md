@@ -34,19 +34,40 @@ For detailed setup instructions and configuration guides, visit the **[MyArch Do
 ## 🚀 Quick Install
 
 ```bash
-# Clone the repository
 git clone https://github.com/darriour/MyArch.git
 cd MyArch
-
-# Link configurations (Run the setup script or link manually)
-ln -s $(pwd)/hypr ~/.config/hypr
-ln -s $(pwd)/waybar ~/.config/waybar
-ln -s $(pwd)/kitty ~/.config/kitty
-ln -s $(pwd)/swayosd ~/.config/swayosd
-ln -s $(pwd)/wallust ~/.config/wallust
+./install.sh
 ```
 
-See the [full installation guide](https://darriour.github.io/MyArch/installation) for full dependency list and detailed setup.
+The installer is interactive: it asks before every stage and before anything
+destructive, backs up whatever it would replace, and writes a `restore.sh` to
+put it all back.
+
+| Stage | What it does |
+|-------|--------------|
+| 1–2 | Installs packages from `packages/pacman.txt` and `packages/aur.txt` (bootstraps `yay` if you have no AUR helper) |
+| 3 | Moves conflicting configs to `~/.config-backup-<timestamp>/` and generates a restore script |
+| 4 | Symlinks `hypr`, `waybar`, `kitty`, `rofi`, `wallust`, `zsh` into `~/.config`, and creates the directories the scripts write into |
+| 5 | Sets up zsh: `~/.zshenv`, `$HISTFILE`, zinit pre-warm, `chsh` |
+| 6 | Rewrites the two files that hardcode a username |
+| 7 | Picks a wallpaper and runs `wallust` to generate every colour file |
+| 8 | Enables `gcr-ssh-agent.socket`, masks `swaync.service` |
+| 9 | Optionally builds [ocr-snipper](https://github.com/Darunesh1/ocr-snipper) (ALT+X) and clones the [nvim config](https://github.com/Darunesh1/my_nvim) |
+| 10 | Audits the result and prints a summary of what is and is not in place |
+
+```bash
+./install.sh --check     # audit an existing setup, change nothing
+./install.sh --dry-run   # show every command it would run
+./install.sh --yes       # accept every prompt
+```
+
+Run `--check` any time something stops working -- it reports missing packages,
+broken links, ungenerated theme files and unconfigured services, and exits
+non-zero if anything is missing.
+
+After installing, set your monitor in `hypr/config/monitors.lua` and start
+Hyprland. See the [full installation guide](https://darriour.github.io/MyArch/installation)
+for the manual route.
 
 ## 📄 License
 
