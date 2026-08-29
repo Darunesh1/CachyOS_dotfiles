@@ -1,6 +1,6 @@
 # MyArch
 
-[![Documentation](https://img.shields.io/badge/docs-view-blue?style=flat-square)](https://darriour.github.io/MyArch/)
+[![Documentation](https://img.shields.io/badge/docs-view-blue?style=flat-square)](https://Darunesh1.github.io/MyArch/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
 A modern, minimalist, and highly dynamic Hyprland configuration for Arch Linux.
@@ -14,12 +14,12 @@ A modern, minimalist, and highly dynamic Hyprland configuration for Arch Linux.
 
 ## 📚 Documentation
 
-For detailed setup instructions and configuration guides, visit the **[MyArch Documentation](https://darriour.github.io/MyArch/)**.
+For detailed setup instructions and configuration guides, visit the **[MyArch Documentation](https://Darunesh1.github.io/MyArch/)**.
 
 ### Quick Links
-- [Installation Guide](https://darriour.github.io/MyArch/installation)
-- [Dynamic Theming Setup](https://darriour.github.io/MyArch/configuration/theming)
-- [Hyprland Keybindings](https://darriour.github.io/MyArch/configuration/hyprland)
+- [Installation Guide](https://Darunesh1.github.io/MyArch/installation)
+- [Dynamic Theming Setup](https://Darunesh1.github.io/MyArch/configuration/theming)
+- [Hyprland Keybindings](https://Darunesh1.github.io/MyArch/configuration/hyprland)
 
 ## 🖥️ Components
 
@@ -66,7 +66,7 @@ broken links, ungenerated theme files and unconfigured services, and exits
 non-zero if anything is missing.
 
 After installing, set your monitor in `hypr/config/monitors.lua` and start
-Hyprland. See the [full installation guide](https://darriour.github.io/MyArch/installation)
+Hyprland. See the [full installation guide](https://Darunesh1.github.io/MyArch/installation)
 for the manual route.
 
 ## 📄 License
