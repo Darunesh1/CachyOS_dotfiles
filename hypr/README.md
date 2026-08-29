@@ -87,7 +87,7 @@ emergency binds: **SUPER+Q** (terminal), **SUPER+R** (run), **SUPER+M** (exit).
 | `SUPER + B` | Open Firefox |
 | `SUPER + A` | Open app launcher (rofi) |
 | `SUPER + .` | Emoji picker |
-| `SUPER + V` | Clipboard manager |
+| `SUPER + V` | Clipboard history (rofi; `CTRL + SHIFT + DEL` clears it) |
 | `ALT + X` | OCR snipper (region → text to clipboard) |
 | `SUPER + Q` / `ALT + F4` | Kill active window |
 | `SUPER + W` | Toggle floating |

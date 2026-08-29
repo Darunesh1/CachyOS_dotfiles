@@ -176,10 +176,7 @@ hl.bind("XF86AudioPrev",  hl.dsp.exec_cmd("playerctl previous"),   { locked = tr
 
 
 -- ── Clipboard Manager ───────────────────────────────────────────────────────
-hl.bind(mainMod .. " + V", hl.dsp.exec_cmd(
-    [[cliphist list | rofi -dmenu -i -matching fuzzy -p "󰅍  Clipboard" -theme ]] ..
-    L.config .. [[/rofi/themes/clipboard.rasi | cliphist decode | wl-copy]]
-))
+hl.bind(mainMod .. " + V", hl.dsp.exec_cmd(L.scripts .. "/rofi/clipboard.sh"))
 
 -- ── OCR Snipper ─────────────────────────────────────────────────────────────
 -- Capture region and extract text to clipboard
