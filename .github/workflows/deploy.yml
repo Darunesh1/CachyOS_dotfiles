@@ -8,19 +8,28 @@ on:
     paths:
       - 'docs/**'
       - '.github/workflows/deploy.yml'
+  # Allows a manual redeploy from the Actions tab without touching docs/
+  workflow_dispatch:
 
+# Least privilege: the build output is uploaded as an artifact, so nothing
+# needs write access to the repository itself.
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
+
+# Queue overlapping deploys instead of letting them clobber each other.
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Deploy to GitHub Pages
+  build:
+    name: Build website
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Install pnpm
         uses: pnpm/action-setup@v3
@@ -42,10 +51,19 @@ jobs:
         run: pnpm build
         working-directory: docs
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs/build
-          user_name: 'github-actions[bot]'
-          user_email: 'github-actions[bot]@users.noreply.github.com'
+          path: docs/build
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
