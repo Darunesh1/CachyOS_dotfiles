@@ -35,6 +35,9 @@ fd                      # SUPER+SHIFT+E file finder (hard requirement)
 jq                      # SUPER+Tab window switcher
 pacman-contrib          # checkupdates, for waybar's custom/updates module
 udiskie                 # removable media automount
+libayatana-appindicator # udiskie's system tray icon
+network-manager-applet  # nm-applet, network tray icon (autostart.lua)
+blueman                 # blueman-applet, bluetooth tray icon (autostart.lua)
 polkit-gnome            # authentication agent; without it auth_admin fails silently
 gcr                     # gcr-ssh-agent.socket -> $XDG_RUNTIME_DIR/gcr/ssh
 xdg-user-dirs           # xdg-user-dir, used by zsh/conf.d/env.zsh
