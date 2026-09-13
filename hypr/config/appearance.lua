@@ -3,6 +3,14 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 
 -- https://wiki.hypr.land/Configuring/Basics/Variables/#general
+-- config/wallust.lua is regenerated on every wallpaper change, followed by a
+-- `hyprctl reload`. Drop any cached copy so the new colours are picked up.
+package.loaded["config/wallust"] = nil
+local ok_wallust, wallust = pcall(require, "config/wallust")
+if not ok_wallust then
+    wallust = {}
+end
+
 hl.config({
     general = {
         gaps_in  = 2,
@@ -12,8 +20,8 @@ hl.config({
 
         -- https://wiki.hypr.land/Configuring/Basics/Variables/#variable-types for info about colors
         col = {
-            active_border   = { colors = { "rgba(33ccffee)", "rgba(00ff99ee)" }, angle = 45 },
-            inactive_border = "rgba(595959aa)",
+            active_border   = { colors = wallust.active_border or { "rgba(33ccffee)", "rgba(00ff99ee)" }, angle = 45 },
+            inactive_border = wallust.inactive_border or "rgba(595959aa)",
         },
 
         -- Set to true to enable resizing windows by clicking and dragging on borders and gaps
@@ -38,7 +46,7 @@ hl.config({
             enabled      = true,
             range        = 4,
             render_power = 3,
-            color        = "rgba(1a1a1aee)",
+            color        = wallust.shadow or "rgba(1a1a1aee)",
         },
 
         -- https://wiki.hypr.land/Configuring/Basics/Variables/#blur
