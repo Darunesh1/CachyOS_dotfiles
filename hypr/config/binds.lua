@@ -33,6 +33,9 @@ hl.bind(mainMod .. " + SHIFT + G", hl.dsp.exec_cmd(L.scripts .. "/power/profile-
 -- Shader menu (was spelled "SUPER CTRL" literally in binds.conf)
 hl.bind(mainMod .. " + CTRL + S", hl.dsp.exec_cmd(L.scripts .. "/shader-menu.sh"))
 
+-- Keybind cheat sheet (parsed from these files; the comment above a bind is its label)
+hl.bind(mainMod .. " + slash", hl.dsp.exec_cmd(L.scripts .. "/rofi/keybinds.sh"))
+
 
 -- ── Applications ────────────────────────────────────────────────────────────
 hl.bind(mainMod .. " + T", hl.dsp.exec_cmd(L.terminal))
@@ -69,6 +72,7 @@ hl.bind(mainMod .. " + SHIFT + R", hl.dsp.exec_cmd("hyprctl reload"))           
 
 -- ── Screenshots ─────────────────────────────────────────────────────────────
 -- Long-bracket strings [[ ]] avoid escaping the embedded quotes.
+
 -- Screenshot a selected area
 hl.bind(mainMod .. " + P", hl.dsp.exec_cmd(
     [[bash -c 'mkdir -p ~/Pictures/Screenshots && grim -g "$(slurp)" - | tee ~/Pictures/Screenshots/Screenshot_$(date +%Y-%m-%d_%H-%M-%S).png | wl-copy']]

@@ -81,6 +81,7 @@ emergency binds: **SUPER+Q** (terminal), **SUPER+R** (run), **SUPER+M** (exit).
 
 | Key | Action |
 |-----|--------|
+| `SUPER + /` | Keybind cheat sheet (rofi, parsed live from `config/*.lua`) |
 | `SUPER + T` | Open terminal |
 | `SUPER + E` | Open file manager |
 | `SUPER + SHIFT + E` | Find a file by name (rofi, needs `fd`) |
