@@ -98,6 +98,9 @@ hl.bind(mainMod .. " + SHIFT + P", hl.dsp.exec_cmd(L.scripts .. "/recording/scre
 -- High quality: constant-quality H.264 + lossless FLAC audio in mkv
 hl.bind(mainMod .. " + ALT + P", hl.dsp.exec_cmd(L.scripts .. "/recording/screen-record-hq.sh"))
 
+-- Recording menu: pick area, resolution and sound (press again to stop)
+hl.bind(mainMod .. " + Print", hl.dsp.exec_cmd(L.scripts .. "/recording/record-menu.sh"))
+
 -- ── Window Cycling (Alt + Tab) ──────────────────────────────────────────────
 -- Cycle through windows in the current workspace.
 -- Was two `bind = ALT, Tab` lines; collapsed into one lambda, which preserves

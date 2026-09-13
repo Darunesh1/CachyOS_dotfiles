@@ -112,6 +112,7 @@ emergency binds: **SUPER+Q** (terminal), **SUPER+R** (run), **SUPER+M** (exit).
 | `Print` | Screenshot a selected area (same as `SUPER + P`) |
 | `SHIFT + Print` | Screenshot full screen |
 | `SUPER + P` | Screenshot selected area |
+| `SUPER + Print` | Recording menu: region/full screen, resolution, sound (press again to stop) |
 | `SUPER + SHIFT + P` | Toggle screen recording |
 | `SUPER + ALT + P` | Toggle high-quality screen recording |
 | `SUPER + R` | Reload Waybar |

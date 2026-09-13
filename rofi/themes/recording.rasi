@@ -1,0 +1,98 @@
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/* recording.rasi  —  screen recording menu (SUPER + Print)                    */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Palette comes from wallust; see wallust/templates/rofi.rasi in the repo. */
+@import "colours.rasi"
+
+configuration {
+    display-dmenu: "󰑋  Record";
+}
+
+* {
+    background-color: transparent;
+    text-color:       @fg0;
+    border:           0;
+    margin:           0;
+    padding:          0;
+    spacing:          0;
+}
+
+window {
+    width:            600px;
+    background-color: @bg0;
+    border:           1px;
+    border-color:     @border-col;
+    border-radius:    12px;
+}
+
+mainbox {
+    orientation:      vertical;
+    spacing:          0;
+    children:         [ inputbar, listview ];
+}
+
+inputbar {
+    orientation:      horizontal;
+    background-color: @bg1;
+    border-radius:    12px 12px 0 0;
+    padding:          10px 14px;
+    spacing:          10px;
+    border:           0 0 1px 0;
+    border-color:     @border-col;
+    children:         [ prompt, entry ];
+    expand:           false;
+}
+
+prompt {
+    text-color:       @accent;
+    font:             "JetBrainsMono Nerd Font Bold 13";
+    vertical-align:   0.5;
+}
+
+entry {
+    text-color:       @fg0;
+    placeholder:      "region, full, 720p, sound…";
+    placeholder-color:@fg1;
+    cursor:           text;
+    vertical-align:   0.5;
+    expand:           true;
+}
+
+listview {
+    layout:           vertical;
+    spacing:          1px;
+    padding:          8px;
+    lines:            10;
+    scrollbar:        false;
+    fixed-height:     false;
+    dynamic:          true;
+}
+
+element {
+    orientation:      horizontal;
+    border-radius:    8px;
+    padding:          9px 12px;
+    cursor:           pointer;
+}
+
+element normal normal    { text-color: @fg0; }
+element alternate normal { text-color: @fg0; }
+
+element selected normal {
+    background-color: @selected-bg;
+    text-color:       @fg0;
+    border:           0 0 0 2px;
+    border-color:     @accent;
+}
+
+element selected active {
+    background-color: @selected-bg;
+    text-color:       @accent;
+}
+
+element-text {
+    font:             "JetBrainsMono Nerd Font 11";
+    vertical-align:   0.5;
+    text-color:       inherit;
+}
