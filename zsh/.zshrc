@@ -10,6 +10,10 @@ export VISUAL=$EDITOR
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 
+# Typing a directory name cds into it (`../Documents`, `~/Downloads`).
+# oh-my-zsh used to set this; this config loads zinit instead, which does not.
+setopt auto_cd
+
 # Uncomment to prevent searching for commands not found in package manager
 # unset -f command_not_found_handler
 
