@@ -139,8 +139,9 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-# Config directories linked from the repo into ~/.config.
+# Config directories linked from the repo into the user's XDG config directory.
 LINK_DIRS=(hypr waybar kitty rofi wallust zsh)
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Preflight -- not skippable
@@ -370,7 +371,7 @@ stage_backup() {
 
     local conflicts=() d path
     for d in "${LINK_DIRS[@]}"; do
-        path="$HOME/.config/$d"
+        path="$CONFIG_HOME/$d"
         is_correct_link "$path" "$REPO/$d" && continue
         [[ -e "$path" || -L "$path" ]] && conflicts+=("$path")
     done
@@ -429,11 +430,11 @@ stage_symlinks() {
         return
     fi
 
-    run mkdir -p "$HOME/.config"
+    run mkdir -p "$CONFIG_HOME"
 
     local d path
     for d in "${LINK_DIRS[@]}"; do
-        path="$HOME/.config/$d"
+        path="$CONFIG_HOME/$d"
         if is_correct_link "$path" "$REPO/$d"; then
             ok "~/.config/$d already linked"
             continue
@@ -449,17 +450,17 @@ stage_symlinks() {
     # swayosd is NOT a symlink. There is no swayosd/ directory in this repo --
     # the folder exists only to hold the style.css wallust writes into it. The
     # old README told you to symlink it, which silently broke the theming.
-    if [[ -L "$HOME/.config/swayosd" ]]; then
-        warn "~/.config/swayosd is a symlink (the old README's mistake)."
+    if [[ -L "$CONFIG_HOME/swayosd" ]]; then
+        warn "$CONFIG_HOME/swayosd is a symlink (the old README's mistake)."
         if ask "Replace it with a real directory?" y; then
-            backup_item "$HOME/.config/swayosd"
-            run mkdir -p "$HOME/.config/swayosd"
+            backup_item "$CONFIG_HOME/swayosd"
+            run mkdir -p "$CONFIG_HOME/swayosd"
             write_restore_script
-            ok "~/.config/swayosd is now a real directory"
+            ok "$CONFIG_HOME/swayosd is now a real directory"
         fi
     else
-        run mkdir -p "$HOME/.config/swayosd"
-        ok "~/.config/swayosd (real directory, holds wallust's style.css)"
+        run mkdir -p "$CONFIG_HOME/swayosd"
+        ok "$CONFIG_HOME/swayosd (real directory, holds wallust's style.css)"
     fi
 
     # Directories the scripts write into. awww-cycle.sh spins on an empty shuf
@@ -498,7 +499,7 @@ stage_zsh() {
     fi
 
     # 1. The whole chain hangs off this link existing first.
-    if [[ ! -d "$HOME/.config/zsh" ]]; then
+    if [[ ! -d "$CONFIG_HOME/zsh" ]]; then
         err "~/.config/zsh is missing. Run stage 4 first -- without it \$ZDOTDIR points at nothing"
         err "and zsh loads none of this configuration."
         return
@@ -703,17 +704,19 @@ stage_paths() {
 # ═══════════════════════════════════════════════════════════════════════════
 # 7. Theme generation
 #
-# wallust writes five files that are gitignored, so a fresh clone has none of
+# wallust writes generated files that are gitignored, so a fresh clone has none of
 # them. hyprlock.conf does `source = ...hyprlock-colors.conf`, and a missing
 # source file is a hard error -- hyprlock will not start.
 # ═══════════════════════════════════════════════════════════════════════════
 
 WALLUST_TARGETS=(
-    "$HOME/.config/hypr/hyprlock-colors.conf"
-    "$HOME/.config/kitty/kitty-theme.conf"
-    "$HOME/.config/swayosd/style.css"
-    "$HOME/.config/zsh/wallust-colors.zsh"
-    "$HOME/.config/rofi/themes/colours.rasi"
+    "$CONFIG_HOME/hypr/hyprlock-colors.conf"
+    "$CONFIG_HOME/hypr/config/wallust.lua"
+    "$CONFIG_HOME/kitty/kitty-theme.conf"
+    "$CONFIG_HOME/swayosd/style.css"
+    "$CONFIG_HOME/waybar/style/wallust.css"
+    "$CONFIG_HOME/zsh/wallust-colors.zsh"
+    "$CONFIG_HOME/rofi/themes/colours.rasi"
 )
 
 find_wallpapers() {
@@ -753,7 +756,7 @@ stage_theme() {
         fi
     fi
 
-    if [[ ${#images[@]} -eq 0 ]] && (( ! DRY_RUN )); then
+    if [[ ${#images[@]} -eq 0 ]]; then
         err "Still no wallpapers. Add one to ~/Pictures/Wallpaper and re-run:"
         err "  wallust run ~/Pictures/Wallpaper/<image>"
         skip_stage "theme"
@@ -774,6 +777,12 @@ stage_theme() {
 
     if ! ask "Run wallust to generate the colour files?" y; then
         warn "Skipping. hyprlock will not start until these exist."
+        skip_stage "theme"
+        return
+    fi
+
+    if [[ ! -f "$chosen" ]]; then
+        err "Selected wallpaper is not a regular file: $chosen"
         skip_stage "theme"
         return
     fi
@@ -1040,7 +1049,7 @@ BINARIES
     group "Config links"
     local d path
     for d in "${LINK_DIRS[@]}"; do
-        path="$HOME/.config/$d"
+        path="$CONFIG_HOME/$d"
         if is_correct_link "$path" "$REPO/$d"; then
             row OK "~/.config/$d" "-> repo"
         elif [[ -L "$path" ]]; then
@@ -1052,12 +1061,12 @@ BINARIES
         fi
     done
     # This one must NOT be a symlink -- see stage 4.
-    if [[ -L "$HOME/.config/swayosd" ]]; then
-        row MISSING "~/.config/swayosd" "is a symlink; must be a real directory"
-    elif [[ -d "$HOME/.config/swayosd" ]]; then
-        row OK "~/.config/swayosd" "real directory (correct)"
+    if [[ -L "$CONFIG_HOME/swayosd" ]]; then
+        row MISSING "$CONFIG_HOME/swayosd" "is a symlink; must be a real directory"
+    elif [[ -d "$CONFIG_HOME/swayosd" ]]; then
+        row OK "$CONFIG_HOME/swayosd" "real directory (correct)"
     else
-        row MISSING "~/.config/swayosd" "absent; wallust cannot write style.css"
+        row MISSING "$CONFIG_HOME/swayosd" "absent; wallust cannot write style.css"
     fi
 
     # ── Runtime directories ─────────────────────────────────────────────────
@@ -1163,10 +1172,10 @@ BINARIES
     group "Hardware-specific (always check by hand)"
     local cfg_out real_out cfg_if real_if
     cfg_out="$(grep -oE 'output[[:space:]]*=[[:space:]]*"[^"]+"' "$REPO/hypr/config/monitors.lua" | head -1 | grep -oE '"[^"]+"' | tr -d '"')"
-    real_out="$(hyprctl monitors 2>/dev/null | awk '/^Monitor/ {print $2; exit}')"
+    real_out="$(hyprctl monitors 2>/dev/null | awk '/^Monitor/ {print $2; exit}' || true)"
     row WARN "monitors.lua output" "config: ${cfg_out:-?}${real_out:+   detected: $real_out}"
     cfg_if="$(grep -oE '"interface"[[:space:]]*:[[:space:]]*"[^"]+"' "$REPO/waybar/config.jsonc" | head -1 | grep -oE '"[^"]+"$' | tr -d '"')"
-    real_if="$(ip -o link 2>/dev/null | awk -F': ' '$2 ~ /^wl/ {print $2; exit}')"
+    real_if="$(ip -o link 2>/dev/null | awk -F': ' '$2 ~ /^wl/ {print $2; exit}' || true)"
     row WARN "waybar network interface" "config: ${cfg_if:-?}${real_if:+   detected: $real_if}"
     return 0
 }

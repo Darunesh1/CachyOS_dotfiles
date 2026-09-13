@@ -7,6 +7,10 @@
 	"margin-right": 0,
 	"spacing": 0,
 
+	// Swap in the CSS when style.css or anything it @imports changes (wallust
+	// rewrites style/wallust.css on every wallpaper), without restarting the bar.
+	"reload_style_on_change": true,
+
 	// ── Layout ─────────────────────────────────────────────────────────────────
 	"modules-left": ["custom/poweroff", "hyprland/workspaces", "hyprland/window"],
 	"modules-center": ["clock", "custom/coffee"],
@@ -61,7 +65,6 @@
 	// ── Network (WiFi signal % + internet state) ──────────────────────────────────
 	"network": {
 		"interface": "wlan0",
-		"format": "{bandwidthDownBytes} {bandwidthUpBytes}", // <--- ADD THIS LINE to keep the tracker awake
 		"format-wifi": "󰤨 {signalStrength}%",
 		"format-ethernet": "󰊗 {ipaddr}",
 		"format-disconnected": "󰤭 off",

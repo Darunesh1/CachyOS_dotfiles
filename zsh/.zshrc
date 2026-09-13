@@ -7,6 +7,8 @@
 # because core.editor is set separately.
 export EDITOR=nvim
 export VISUAL=$EDITOR
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
 
 # Uncomment to prevent searching for commands not found in package manager
 # unset -f command_not_found_handler

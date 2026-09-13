@@ -35,7 +35,7 @@ reports it rather than redoing the work. Nothing bad happens if you run it twice
 | 4 | Symlinks | Links `hypr`, `waybar`, `kitty`, `rofi`, `wallust` and `zsh` into `~/.config`, creates `~/.config/swayosd` and the directories the scripts write into. |
 | 5 | Zsh | Links `~/.zshenv`, fixes the history file and `.zshrc` permissions, pre-installs zinit and its plugins, offers `chsh`. |
 | 6 | Paths | Rewrites the two files that hardcode a username, and optionally tells git to ignore the change. |
-| 7 | Theme | Picks a wallpaper and runs `wallust`, then verifies all five generated files exist. |
+| 7 | Theme | Picks a wallpaper and runs `wallust`, then verifies all generated theme files exist. |
 | 8 | Services | Enables `gcr-ssh-agent.socket`, masks `swaync.service`. |
 | 9 | Extras | Optionally builds [ocr-snipper](https://github.com/Darunesh1/ocr-snipper) for `ALT+X`, and clones the [nvim config](https://github.com/Darunesh1/my_nvim). |
 | 10 | Check | Audits the result and prints a summary. |
@@ -234,9 +234,10 @@ git update-index --skip-worktree rofi/themes/launcher.rasi hypr/hyprlock.conf
 
 ### 5. Generate the theme
 
-Five config files are generated from your wallpaper by `wallust` and are
-gitignored, so a fresh clone has none of them. Run it **once** before first
-launch:
+The theme files are generated from your wallpaper by `wallust` and are
+gitignored, so a fresh clone has none of them. The installer requires at least
+one image in `~/Pictures/Wallpaper`; it will not call `wallust` with an empty
+path. Run it **once** before first launch:
 
 ```bash
 wallust run ~/Pictures/Wallpaper/your-wallpaper.jpg
@@ -249,7 +250,10 @@ source file is a **hard error** — hyprlock will not start, and you cannot unlo
 a screen you could not lock. Do not skip this step.
 :::
 
-This writes the colour files for Hyprlock, Kitty, SwayOSD, Rofi and Zsh.
+This writes colour files for Hyprland, Hyprlock, Kitty, SwayOSD, Waybar, Rofi
+and Zsh. Waybar and Hyprland are refreshed by the wallpaper cycle script after
+each successful update; Rofi and new Kitty/Zsh sessions use the generated files
+automatically.
 
 ### 6. Systemd user units
 

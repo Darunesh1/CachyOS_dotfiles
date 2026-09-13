@@ -1,12 +1,14 @@
 # Wallust v4 configuration for MyArch
 
-backend = "fastresize"
-palette = "salience"
+backend = "resized"
+palette = "kmeans"
 check_contrast = true
 
 [templates]
 swayosd = { template = 'swayosd.css', target = '~/.config/swayosd/style.css' }
 hyprlock = { template = 'hyprlock.conf', target = '~/.config/hypr/hyprlock-colors.conf' }
+hypr = { template = 'hypr.lua', target = '~/.config/hypr/config/wallust.lua' }
 kitty = { template = 'kitty.conf', target = '~/.config/kitty/kitty-theme.conf' }
+waybar = { template = 'waybar.css', target = '~/.config/waybar/style/wallust.css' }
 zsh = { template = 'zsh.zsh', target = '~/.config/zsh/wallust-colors.zsh' }
 rofi = { template = 'rofi.rasi', target = '~/.config/rofi/themes/colours.rasi' }

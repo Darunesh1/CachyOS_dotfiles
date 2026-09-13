@@ -15,9 +15,13 @@ The pipeline is triggered whenever your wallpaper changes (either manually or vi
     - **Rofi**: `~/.config/rofi/themes/colours.rasi`
     - **Kitty**: `~/.config/kitty/kitty-theme.conf`
     - **Zsh**: `~/.config/zsh/wallust-colors.zsh`
+    - **Hyprland**: `~/.config/hypr/config/wallust.lua`
+    - **Waybar**: `~/.config/waybar/style/wallust.css`
 
-All five are generated, so they are gitignored and absent from a fresh clone —
-run `wallust run <wallpaper>` once after cloning.
+All generated files are gitignored and absent from a fresh clone — run
+`wallust run <wallpaper>` once after cloning. The installer uses Wallust's
+resized backend and k-means palette to avoid the salience backend crash seen
+with some CachyOS wallpapers.
 
 ## Component Breakdown
 
@@ -45,5 +49,9 @@ Every Rofi menu imports a single generated palette, so they all share one look.
 If you want to force a theme update based on your current wallpaper, you can run:
 
 ```bash
-wallust run ~/Pictures/Wallpaper/current_wallpaper && killall swayosd-server && swayosd-server > /dev/null 2>&1 & disown
+wallust run ~/Pictures/Wallpaper/current_wallpaper
+hyprctl reload
 ```
+
+Waybar needs no restart: `reload_style_on_change` in `waybar/config.jsonc`
+makes it swap in the regenerated `style/wallust.css` on its own.

@@ -34,11 +34,15 @@ hl.on("hyprland.start", function()
     -- Battery notifications
     hl.exec_cmd(L.scripts .. "/power/battery-notify.sh")
 
+    -- Tray applets (waybar's tray module)
+    hl.exec_cmd("nm-applet --indicator")
+    hl.exec_cmd("blueman-applet")
+
     -- Start SwayOSD daemon
     hl.exec_cmd("swayosd-server")
 
     -- Automount removable media
-    hl.exec_cmd("udiskie --automount --notify")
+    hl.exec_cmd("udiskie --automount --notify --tray")
 
     -- Polkit authentication agent. Without one, any action whose polkit rule
     -- is auth_admin (mounting some volumes, loginctl terminate-user, ...) has
