@@ -122,8 +122,8 @@ Stages (each is prompted and skippable):
    5. Zsh               ~/.zshenv, history, zinit pre-warm, chsh
    6. Paths             rewrite the two files that hardcode a username
    7. Theme             pick a wallpaper and run wallust
-   8. Services          gcr-ssh-agent.socket, mask swaync.service
-   9. Extras            ocr-snipper (ALT+X) and the nvim config
+   8. Services          gcr-ssh-agent.socket, mask swaync.service, scx_lavd (Game Mode)
+   9. Extras            ocr-snipper (ALT+X), the nvim config, Lutris game-performance prefix
   10. Check             audit what is actually in place, then summarise
 USAGE
 }
@@ -852,6 +852,45 @@ stage_services() {
             && ok "swaync.service masked" \
             || warn "Could not mask swaync.service."
     fi
+
+    setup_scx_loader
+    return 0
+}
+
+# sched-ext scheduler for Game Mode. CachyOS's power-profiles-daemon switches
+# the running scx scheduler to its Gaming mode on the performance profile and
+# back to Auto on balanced -- but only if scx_loader is running one. Starting
+# one on demand needs polkit auth_admin every time, so run scx_lavd from boot
+# in Auto mode, as the CachyOS wiki recommends for gaming.
+SCX_CONFIG="/etc/scx_loader/config.toml"
+
+scx_running() { scxctl get 2>/dev/null | grep -qv 'no scx scheduler'; }
+
+setup_scx_loader() {
+    command -v scx_loader >/dev/null || return 0
+
+    if scx_running; then
+        ok "sched-ext scheduler running: $(scxctl get 2>/dev/null)"
+        return 0
+    fi
+
+    info "No sched-ext scheduler is running. Game Mode switches scx_lavd to its"
+    info "Gaming mode through the performance profile, which needs it running."
+    ask "Run scx_lavd from boot (Auto mode) via scx_loader?" y || { skip_stage "scx"; return 0; }
+
+    if [[ -f "$SCX_CONFIG" ]] && grep -qE '^[[:space:]]*default_sched[[:space:]]*=' "$SCX_CONFIG"; then
+        ok "$SCX_CONFIG already names a scheduler -- leaving it as is"
+    else
+        local backup_note
+        [[ -f "$SCX_CONFIG" ]] && backup_note="(existing file kept as $SCX_CONFIG.bak)" || backup_note=""
+        run_sh "sudo mkdir -p /etc/scx_loader && { [ ! -f ${SCX_CONFIG@Q} ] || sudo cp ${SCX_CONFIG@Q} ${SCX_CONFIG@Q}.bak; } && printf '%s\n' 'default_sched = \"scx_lavd\"' 'default_mode = \"Auto\"' | sudo tee ${SCX_CONFIG@Q} >/dev/null" \
+            && ok "wrote $SCX_CONFIG $backup_note" \
+            || { warn "Could not write $SCX_CONFIG."; return 0; }
+    fi
+
+    run sudo systemctl enable --now scx_loader.service \
+        && ok "scx_loader enabled" \
+        || warn "Could not enable scx_loader.service."
     return 0
 }
 
@@ -968,6 +1007,44 @@ install_nvim_config() {
         || err "Clone failed."
 }
 
+# Lutris 0.5.22 keeps its config in its data dir when ~/.config/lutris does
+# not exist -- which is the case here.
+lutris_system_yml() {
+    if [[ -d "${XDG_CONFIG_HOME:-$HOME/.config}/lutris" ]]; then
+        echo "${XDG_CONFIG_HOME:-$HOME/.config}/lutris/system.yml"
+    else
+        echo "${XDG_DATA_HOME:-$HOME/.local/share}/lutris/system.yml"
+    fi
+}
+
+# CachyOS wiki: put game-performance in Lutris's Command prefix. While a game
+# runs it holds the performance profile (so scx Gaming mode too) and inhibits
+# idle; the previous profile comes back when the game exits.
+setup_lutris_prefix() {
+    command -v lutris >/dev/null || return 0
+    command -v game-performance >/dev/null || return 0
+
+    local yml
+    yml="$(lutris_system_yml)"
+    if grep -qE '^[[:space:]]+prefix_command:' "$yml" 2>/dev/null; then
+        ok "Lutris command prefix already set: $(sed -nE 's/^[[:space:]]+prefix_command:[[:space:]]*//p' "$yml")"
+        return 0
+    fi
+
+    info "Lutris: every game can launch through CachyOS's game-performance wrapper."
+    ask "Set Lutris's global command prefix to game-performance?" y || { skip_stage "lutris"; return 0; }
+
+    if [[ ! -f "$yml" ]]; then
+        run mkdir -p "$(dirname "$yml")"
+        run_sh "printf 'system:\n  prefix_command: game-performance\n' > ${yml@Q}"
+    elif grep -qE '^system:' "$yml"; then
+        run sed -i '/^system:/a\  prefix_command: game-performance' "$yml"
+    else
+        run_sh "printf 'system:\n  prefix_command: game-performance\n' >> ${yml@Q}"
+    fi
+    ok "Lutris command prefix: game-performance (${yml/#"$HOME"/\~})"
+}
+
 stage_extras() {
     step "9/10  Extras"
 
@@ -979,6 +1056,9 @@ stage_extras() {
 
     echo
     install_nvim_config || true
+
+    echo
+    setup_lutris_prefix || true
     return 0
 }
 
@@ -1178,6 +1258,11 @@ BINARIES
     else
         row SKIPPED "systemd units" "systemctl not available"
     fi
+    if command -v scxctl >/dev/null; then
+        scx_running \
+            && row OK "sched-ext scheduler" "$(scxctl get 2>/dev/null)" \
+            || row WARN "sched-ext scheduler" "none running; Game Mode cannot switch to scx Gaming mode"
+    fi
 
     # ── Extras ──────────────────────────────────────────────────────────────
     group "Extras"
@@ -1199,6 +1284,11 @@ BINARIES
     [[ -d "$NVIM_DIR" ]] \
         && row OK "~/.config/nvim" "present" \
         || row WARN "~/.config/nvim" "not installed (optional)"
+    if command -v lutris >/dev/null; then
+        grep -qE '^[[:space:]]+prefix_command:[[:space:]]*game-performance' "$(lutris_system_yml)" 2>/dev/null \
+            && row OK "Lutris command prefix" "game-performance" \
+            || row WARN "Lutris command prefix" "not game-performance (optional, stage 9)"
+    fi
 
     # ── Hardware ────────────────────────────────────────────────────────────
     # Always a reminder: these cannot be verified, only compared.

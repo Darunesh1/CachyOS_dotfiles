@@ -36,8 +36,8 @@ reports it rather than redoing the work. Nothing bad happens if you run it twice
 | 5 | Zsh | Links `~/.zshenv`, fixes the history file and `.zshrc` permissions, pre-installs zinit and its plugins, offers `chsh`. |
 | 6 | Paths | Rewrites the two files that hardcode a username, and optionally tells git to ignore the change. |
 | 7 | Theme | Picks a wallpaper and runs `wallust`, then verifies all generated theme files exist. |
-| 8 | Services | Enables `gcr-ssh-agent.socket`, masks `swaync.service`. |
-| 9 | Extras | Optionally builds [ocr-snipper](https://github.com/Darunesh1/ocr-snipper) for `ALT+X`, and clones the [nvim config](https://github.com/Darunesh1/my_nvim). |
+| 8 | Services | Enables `gcr-ssh-agent.socket`, masks `swaync.service`, and runs `scx_lavd` from boot via `scx_loader` so Game Mode can switch it to Gaming mode. |
+| 9 | Extras | Optionally builds [ocr-snipper](https://github.com/Darunesh1/ocr-snipper) for `ALT+X`, clones the [nvim config](https://github.com/Darunesh1/my_nvim), and sets Lutris's command prefix to `game-performance`. |
 | 10 | Check | Audits the result and prints a summary. |
 
 ### Options

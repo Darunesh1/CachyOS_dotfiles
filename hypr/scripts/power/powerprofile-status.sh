@@ -2,7 +2,12 @@
 
 profile=$(powerprofilesctl get)
 
-if [ "$profile" = "power-saver" ]; then
+if [ -f "${XDG_RUNTIME_DIR:-/tmp}/game-mode/active" ]; then
+    icon="🎮"
+    text="Game Mode (performance + scx gaming)"
+    sched=$(scxctl get 2>/dev/null)
+    [[ -n "$sched" && "$sched" != *"no scx scheduler"* ]] && text="$text\\n$sched"
+elif [ "$profile" = "power-saver" ]; then
     icon="󰌪"
     text="Ultra Power Saving"
 elif [ "$profile" = "balanced" ]; then

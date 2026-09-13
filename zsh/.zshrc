@@ -18,7 +18,7 @@ setopt auto_cd
 # unset -f command_not_found_handler
 
 # For Game Mode
-if [ -f /tmp/game_mode_state ]; then
+if [ -f "${XDG_RUNTIME_DIR:-/tmp}/game-mode/active" ]; then
     export MESA_GLTHREAD=true
     export MESA_NO_ERROR=1
 fi

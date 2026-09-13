@@ -107,7 +107,7 @@ emergency binds: **SUPER+Q** (terminal), **SUPER+R** (run), **SUPER+M** (exit).
 | `SUPER + LMB / RMB` | Move / resize window |
 | `SUPER + L` | Lock screen |
 | `Ctrl + Alt + Delete` | Power menu (Rofi) |
-| `SUPER + SHIFT + G` | Power profile menu |
+| `SUPER + SHIFT + G` | Power profile menu (incl. Game Mode) |
 | `SUPER + CTRL + S` | Screen shader menu |
 | `Print` | Screenshot a selected area (same as `SUPER + P`) |
 | `SHIFT + Print` | Screenshot full screen |
@@ -128,7 +128,29 @@ Access via `SUPER + SHIFT + G`:
 - **Power Saving** — disables animations, blur and shadows, enables VFR
 - **Balanced** — normal desktop experience
 - **Performance** — max performance for apps
-- **Game Mode** — performance profile, minimal compositor overhead, Mesa optimizations
+- **Game Mode** — toggles on/off (the waybar icon shows 🎮 while active):
+  - `performance` profile. CachyOS's power-profiles-daemon then switches the
+    sched-ext scheduler (`scx_lavd`, run from boot by `scx_loader`, installer
+    stage 8) into its **Gaming** mode, and back to Auto afterwards.
+  - animations, blur and shadows off; `render:direct_scanout = 2` so fullscreen
+    games skip compositing
+  - notifications on Do Not Disturb; the wallpaper cycle paused so no wallust
+    run or `hyprctl reload` hits mid-game
+  - turning it off restores exactly what was there before, including the
+    previous profile. Picking another profile while it's on ends it first.
+
+  `ananicy-cpp` stays on and keeps prioritising game processes. Feral
+  gamemode is deliberately not used; the CachyOS wiki says it conflicts with
+  ananicy-cpp.
+
+### Gaming with Lutris
+
+Installer stage 9 sets Lutris's global **Command prefix** to CachyOS's
+`game-performance` (in `~/.local/share/lutris/system.yml`). Every game then
+holds the performance profile, and so scx Gaming mode, and blocks idle and
+lock while it runs, with no need to open the menu. Game Mode on top adds the
+desktop-side changes above. For Steam, use `game-performance %command%` as a
+game's launch option.
 
 ## Usage
 
