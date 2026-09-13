@@ -53,7 +53,9 @@ Modular Hyprland configuration written in **Lua**.
     │   └── window-switcher.sh     # Pick any window on any workspace
     │
     └── wallpaper/
-        └── awww-cycle.sh          # Auto-cycle wallpapers
+        ├── awww-cycle.sh          # Auto-cycle wallpapers every 200 s
+        ├── set-wallpaper.sh       # Apply one wallpaper + wallust theme (shared)
+        └── wallpaper-menu.sh      # Rofi thumbnail picker (SUPER + CTRL + W)
 ```
 
 ## Quick Reference
@@ -87,6 +89,7 @@ emergency binds: **SUPER+Q** (terminal), **SUPER+R** (run), **SUPER+M** (exit).
 | `SUPER + SHIFT + E` | Find a file by name (rofi, needs `fd`) |
 | `SUPER + B` | Open Firefox |
 | `SUPER + A` | Open app launcher (rofi) |
+| `SUPER + CTRL + W` | Wallpaper picker (rofi thumbnail grid; pauses auto-cycle, "Random" resumes it) |
 | `SUPER + .` | Emoji picker |
 | `SUPER + V` | Clipboard history (rofi; `CTRL + SHIFT + DEL` clears it) |
 | `ALT + X` | OCR snipper (region → text to clipboard) |

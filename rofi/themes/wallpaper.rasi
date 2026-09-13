@@ -1,0 +1,107 @@
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/* wallpaper.rasi  —  wallpaper picker grid (SUPER + CTRL + W)                 */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Palette comes from wallust; see wallust/templates/rofi.rasi in the repo. */
+@import "colours.rasi"
+
+configuration {
+    display-dmenu: "󰸉  Wallpaper";
+    show-icons:    true;
+}
+
+* {
+    background-color: transparent;
+    text-color:       @fg0;
+    border:           0;
+    margin:           0;
+    padding:          0;
+    spacing:          0;
+}
+
+window {
+    width:            1120px;
+    background-color: @bg0;
+    border:           1px;
+    border-color:     @border-col;
+    border-radius:    12px;
+}
+
+mainbox {
+    orientation:      vertical;
+    spacing:          0;
+    children:         [ inputbar, listview ];
+}
+
+inputbar {
+    orientation:      horizontal;
+    background-color: @bg1;
+    border-radius:    12px 12px 0 0;
+    padding:          10px 14px;
+    spacing:          10px;
+    border:           0 0 1px 0;
+    border-color:     @border-col;
+    children:         [ prompt, entry ];
+    expand:           false;
+}
+
+prompt {
+    text-color:       @accent;
+    font:             "JetBrainsMono Nerd Font Bold 13";
+    vertical-align:   0.5;
+}
+
+entry {
+    text-color:       @fg0;
+    placeholder:      "Filter by name…";
+    placeholder-color:@fg1;
+    cursor:           text;
+    vertical-align:   0.5;
+    expand:           true;
+}
+
+/* A 4 x 3 grid of tiles; scrolls for the rest. */
+listview {
+    columns:          4;
+    lines:            3;
+    spacing:          10px;
+    padding:          12px;
+    scrollbar:        false;
+    fixed-height:     true;
+    fixed-columns:    true;
+    flow:             horizontal;
+}
+
+element {
+    orientation:      vertical;
+    border-radius:    10px;
+    padding:          8px;
+    spacing:          6px;
+    cursor:           pointer;
+    children:         [ element-icon, element-text ];
+}
+
+/* The thumbnails are 480x270; rofi fits them into this box, so the size is
+   what makes the image itself readable. */
+element-icon {
+    size:             240px;
+    horizontal-align: 0.5;
+    border-radius:    6px;
+}
+
+element-text {
+    font:             "JetBrainsMono Nerd Font 9";
+    horizontal-align: 0.5;
+    vertical-align:   0.5;
+    text-color:       inherit;
+}
+
+element normal normal    { text-color: @fg1; }
+element alternate normal { text-color: @fg1; }
+
+element selected normal {
+    background-color: @selected-bg;
+    text-color:       @fg0;
+    border:           2px;
+    border-color:     @accent;
+}
