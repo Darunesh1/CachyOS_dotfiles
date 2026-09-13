@@ -21,6 +21,7 @@ thunar                  # file manager (lib.lua M.fileManager)
 grim                    # screenshots (Print, SUPER+P)
 slurp                   # region select for screenshots and recording
 wl-clipboard            # wl-copy / wl-paste
+libnotify               # notify-send, used by the scripts and ocr-snipper
 cliphist                # clipboard history (SUPER+V)
 wf-recorder             # screen recording (SUPER+SHIFT+P)
 

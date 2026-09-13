@@ -870,10 +870,41 @@ OCR_BIN="$HOME/.local/bin/ocr-snipper"
 NVIM_REPO="https://github.com/Darunesh1/my_nvim.git"
 NVIM_DIR="$HOME/.config/nvim"
 
+# leptess binds Tesseract through bindgen, so libclang is a build-time
+# requirement on top of the OCR libraries themselves. main.rs initialises
+# Tesseract with "eng+tam": without the Tamil data every run fails with
+# "Tesseract initialization failed". notify-send reports the result.
+OCR_DEPS=(clang tesseract tesseract-data-eng tesseract-data-tam leptonica libnotify)
+OCR_TESSDATA=(/usr/share/tessdata/eng.traineddata /usr/share/tessdata/tam.traineddata)
+
+# True when cargo actually runs. `command -v cargo` is not enough: the rustup
+# package ships a /usr/bin/cargo shim that fails until a toolchain is set.
+rust_ready() { cargo --version >/dev/null 2>&1; }
+
 install_ocr_snipper() {
     info "ALT+X is bound to $OCR_BIN, which is not part of this repo."
     note "It is a small Rust program: slurp a region, grim it, OCR it with"
     note "Tesseract, put the text on the clipboard."
+
+    local missing=() d
+    for d in "${OCR_DEPS[@]}"; do
+        pacman -Qq -- "$d" &>/dev/null || missing+=("$d")
+    done
+    command -v rustup >/dev/null || rust_ready || missing+=(rustup)
+
+    # Dependencies first, even when the binary exists: a built binary without
+    # the Tamil tessdata is just as dead as no binary.
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        warn "Dependencies missing: ${missing[*]}"
+        if ask "Install them?" y; then
+            local args=(-S --needed)
+            (( ASSUME_YES )) && args+=(--noconfirm)
+            run sudo pacman "${args[@]}" "${missing[@]}" || { err "Dependency install failed."; return 1; }
+        else
+            skip_stage "ocr-snipper"
+            return 0
+        fi
+    fi
 
     if [[ -x "$OCR_BIN" ]]; then
         ok "already installed at ${OCR_BIN/#"$HOME"/\~}"
@@ -882,28 +913,15 @@ install_ocr_snipper() {
         ask "Build and install it?" y || { skip_stage "ocr-snipper"; return 0; }
     fi
 
-    # leptess binds Tesseract through bindgen, so libclang is a build-time
-    # requirement on top of the OCR libraries themselves.
-    local deps=(clang tesseract tesseract-data-eng leptonica) missing=() d
-    for d in "${deps[@]}"; do
-        pacman -Qq -- "$d" &>/dev/null || missing+=("$d")
-    done
-    command -v cargo >/dev/null || missing+=(rustup)
-
-    if [[ ${#missing[@]} -gt 0 ]]; then
-        warn "Build dependencies missing: ${missing[*]}"
-        if ask "Install them?" y; then
-            local args=(-S --needed)
-            (( ASSUME_YES )) && args+=(--noconfirm)
-            run sudo pacman "${args[@]}" "${missing[@]}" || { err "Dependency install failed."; return 1; }
-            if [[ " ${missing[*]} " == *" rustup "* ]] && ! command -v cargo >/dev/null; then
-                info "rustup installed but no toolchain yet."
-                run rustup default stable || warn "Run 'rustup default stable' yourself, then re-run this stage."
-            fi
-        else
-            skip_stage "ocr-snipper"
-            return 0
+    if ! rust_ready; then
+        info "rustup is installed but has no default toolchain, so cargo cannot run."
+        if ask "Install the stable toolchain now? (rustup default stable, ~1 GB)" y; then
+            run rustup default stable || warn "rustup failed."
         fi
+    fi
+    if ! rust_ready && (( ! DRY_RUN )); then
+        err "No working Rust toolchain. Run 'rustup default stable', then re-run this stage."
+        return 1
     fi
 
     if [[ -d "$OCR_SRC/.git" ]]; then
@@ -1043,6 +1061,9 @@ intel_gpu_top|waybar custom/gpu
 fd|file finder (SUPER+SHIFT+E)
 jq|window switcher (SUPER+Tab)
 udiskie|removable media automount
+nm-applet|network tray icon (autostart)
+blueman-applet|bluetooth tray icon (autostart)
+notify-send|notifications from scripts and ocr-snipper
 BINARIES
 
     # ── Symlinks ────────────────────────────────────────────────────────────
@@ -1160,9 +1181,21 @@ BINARIES
 
     # ── Extras ──────────────────────────────────────────────────────────────
     group "Extras"
-    [[ -x "$OCR_BIN" ]] \
-        && row OK "ocr-snipper" "ALT+X works" \
-        || row WARN "ocr-snipper" "ALT+X is bound but inert (optional)"
+    local tessdata_missing=()
+    for t in "${OCR_TESSDATA[@]}"; do
+        [[ -f "$t" ]] || tessdata_missing+=("$(basename "$t")")
+    done
+    if [[ ! -x "$OCR_BIN" ]]; then
+        if rust_ready; then
+            row WARN "ocr-snipper" "not built; ALT+X is inert (optional, stage 9)"
+        else
+            row WARN "ocr-snipper" "not built, and no Rust toolchain: rustup default stable"
+        fi
+    elif [[ ${#tessdata_missing[@]} -gt 0 ]]; then
+        row WARN "ocr-snipper" "built, but missing ${tessdata_missing[*]}; ALT+X fails"
+    else
+        row OK "ocr-snipper" "ALT+X works"
+    fi
     [[ -d "$NVIM_DIR" ]] \
         && row OK "~/.config/nvim" "present" \
         || row WARN "~/.config/nvim" "not installed (optional)"
