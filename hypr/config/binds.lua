@@ -78,8 +78,13 @@ hl.bind(mainMod .. " + P", hl.dsp.exec_cmd(
     [[bash -c 'mkdir -p ~/Pictures/Screenshots && grim -g "$(slurp)" - | tee ~/Pictures/Screenshots/Screenshot_$(date +%Y-%m-%d_%H-%M-%S).png | wl-copy']]
 ))
 
--- Screenshot the entire screen (Print Screen key)
+-- Screenshot a selected area (Print Screen key, same as SUPER + P)
 hl.bind("Print", hl.dsp.exec_cmd(
+    [[bash -c 'mkdir -p ~/Pictures/Screenshots && grim -g "$(slurp)" - | tee ~/Pictures/Screenshots/Screenshot_$(date +%Y-%m-%d_%H-%M-%S).png | wl-copy']]
+))
+
+-- Screenshot the entire screen
+hl.bind("SHIFT + Print", hl.dsp.exec_cmd(
     [[bash -c 'mkdir -p ~/Pictures/Screenshots && grim - | tee ~/Pictures/Screenshots/Screenshot_$(date +%Y-%m-%d_%H-%M-%S).png | wl-copy']]
 ))
 

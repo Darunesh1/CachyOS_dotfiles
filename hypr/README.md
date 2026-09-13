@@ -109,7 +109,8 @@ emergency binds: **SUPER+Q** (terminal), **SUPER+R** (run), **SUPER+M** (exit).
 | `Ctrl + Alt + Delete` | Power menu (Rofi) |
 | `SUPER + SHIFT + G` | Power profile menu |
 | `SUPER + CTRL + S` | Screen shader menu |
-| `Print` | Screenshot full screen |
+| `Print` | Screenshot a selected area (same as `SUPER + P`) |
+| `SHIFT + Print` | Screenshot full screen |
 | `SUPER + P` | Screenshot selected area |
 | `SUPER + SHIFT + P` | Toggle screen recording |
 | `SUPER + ALT + P` | Toggle high-quality screen recording |
