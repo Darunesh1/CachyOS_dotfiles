@@ -17,6 +17,7 @@
 	"modules-right": [
 		"custom/updates",
 		"network",
+		"custom/internet",
 		"pulseaudio",
 		"backlight",
 		"cpu",
@@ -73,6 +74,17 @@
 		"tooltip-format-disconnected": "Disconnected",
 		"on-click": "nm-connection-editor",
 		"interval": 2
+	},
+
+	// ── Internet reachability ─────────────────────────────────────────────────────
+	// Hidden while the internet works. Shows "no internet" / "login" when
+	// NetworkManager's connectivity check fails, so a connected-but-dead Wi-Fi
+	// is visible. Click: re-check now (and open the login page if in a portal).
+	"custom/internet": {
+		"exec": "$HOME/.config/waybar/scripts/internet-status.sh",
+		"return-type": "json",
+		"restart-interval": 5,
+		"on-click": "$HOME/.config/waybar/scripts/internet-status.sh --click"
 	},
 
 	// ── Volume ────────────────────────────────────────────────────────────────────

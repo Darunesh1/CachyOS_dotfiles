@@ -29,6 +29,12 @@ window#waybar {
     background: {{color4}};
 }
 
+/* Background only: the red/yellow of the no-internet badge stays fixed
+   (style/one-dark.css), since a wallpaper palette may have no red at all. */
+#custom-internet {
+    background: {{background}};
+}
+
 #workspaces button.urgent,
 #custom-poweroff:hover,
 #network.disconnected,

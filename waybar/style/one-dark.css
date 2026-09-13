@@ -143,6 +143,19 @@ window#waybar {
 
 #network.disconnected { color: #e06c75; }
 
+/* Connected but no internet (waybar/scripts/internet-status.sh). The module is
+   hidden while the internet works, so these only ever render as a warning,
+   sitting in the same pill row right after #network. */
+#custom-internet {
+    background: rgba(30, 33, 39, 0.88);
+    padding: 4px 12px;
+    margin: 4px 0;
+    font-weight: 700;
+    border-right: 1px solid rgba(62, 68, 82, 0.8);
+}
+#custom-internet.limited { color: #e06c75; }
+#custom-internet.portal  { color: #e5c07b; }
+
 #pulseaudio {
     color: #abb2bf;
     border-right: 1px solid rgba(62, 68, 82, 0.8);

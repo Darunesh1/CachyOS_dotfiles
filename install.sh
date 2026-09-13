@@ -122,7 +122,7 @@ Stages (each is prompted and skippable):
    5. Zsh               ~/.zshenv, history, zinit pre-warm, chsh
    6. Paths             rewrite the two files that hardcode a username
    7. Theme             pick a wallpaper and run wallust
-   8. Services          gcr-ssh-agent.socket, swaync mask, scx_lavd (Game Mode), GPU monitor
+   8. Services          gcr-ssh-agent, swaync mask, scx_lavd, GPU monitor, NM check interval
    9. Extras            ocr-snipper (ALT+X), the nvim config, Lutris game-performance prefix
   10. Check             audit what is actually in place, then summarise
 USAGE
@@ -855,6 +855,32 @@ stage_services() {
 
     setup_scx_loader
     setup_gpu_monitor
+    setup_nm_connectivity
+    return 0
+}
+
+# waybar's "no internet" badge reads NetworkManager's connectivity state. NM
+# re-checks only every 300 s by default, so a drop mid-session could take five
+# minutes to show; this drops it to 60 s.
+NM_CONN_SRC="$REPO/packages/NetworkManager/30-connectivity-interval.conf"
+NM_CONN_DST="/etc/NetworkManager/conf.d/30-connectivity-interval.conf"
+
+setup_nm_connectivity() {
+    command -v NetworkManager >/dev/null || return 0
+
+    if cmp -s "$NM_CONN_SRC" "$NM_CONN_DST"; then
+        ok "NetworkManager connectivity check every 60 s"
+        return 0
+    fi
+
+    info "waybar shows \"no internet\" from NetworkManager's connectivity check,"
+    info "which by default re-runs only every 5 minutes."
+    ask "Re-check every 60 s instead?" y || { skip_stage "nm-connectivity"; return 0; }
+
+    run sudo install -Dm644 "$NM_CONN_SRC" "$NM_CONN_DST" \
+        && run sudo systemctl reload NetworkManager \
+        && ok "connectivity check every 60 s" \
+        || warn "Could not install $NM_CONN_DST."
     return 0
 }
 
@@ -1287,6 +1313,11 @@ BINARIES
             || row WARN "swaync.service" "not masked; D-Bus will start a duplicate that fails"
     else
         row SKIPPED "systemd units" "systemctl not available"
+    fi
+    if command -v NetworkManager >/dev/null; then
+        cmp -s "$NM_CONN_SRC" "$NM_CONN_DST" \
+            && row OK "NM connectivity interval" "60 s (no-internet badge)" \
+            || row WARN "NM connectivity interval" "default 300 s; no-internet badge can lag 5 min"
     fi
     if command -v intel_gpu_top >/dev/null; then
         if gpu_top_capable; then
