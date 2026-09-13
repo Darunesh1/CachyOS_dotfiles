@@ -122,7 +122,7 @@ Stages (each is prompted and skippable):
    5. Zsh               ~/.zshenv, history, zinit pre-warm, chsh
    6. Paths             rewrite the two files that hardcode a username
    7. Theme             pick a wallpaper and run wallust
-   8. Services          gcr-ssh-agent.socket, mask swaync.service, scx_lavd (Game Mode)
+   8. Services          gcr-ssh-agent.socket, swaync mask, scx_lavd (Game Mode), GPU monitor
    9. Extras            ocr-snipper (ALT+X), the nvim config, Lutris game-performance prefix
   10. Check             audit what is actually in place, then summarise
 USAGE
@@ -854,6 +854,36 @@ stage_services() {
     fi
 
     setup_scx_loader
+    setup_gpu_monitor
+    return 0
+}
+
+# waybar's GPU module runs intel_gpu_top, which needs CAP_PERFMON to read the
+# GPU counters. A file capability is lost whenever intel-gpu-tools upgrades
+# (pacman replaces the binary), so a pacman hook re-applies it every time.
+GPU_HOOK_SRC="$REPO/packages/hooks/intel-gpu-top-perfmon.hook"
+GPU_HOOK_DST="/etc/pacman.d/hooks/intel-gpu-top-perfmon.hook"
+
+gpu_top_capable() { getcap /usr/bin/intel_gpu_top 2>/dev/null | grep -q cap_perfmon; }
+
+setup_gpu_monitor() {
+    command -v intel_gpu_top >/dev/null || return 0
+
+    if gpu_top_capable && cmp -s "$GPU_HOOK_SRC" "$GPU_HOOK_DST"; then
+        ok "intel_gpu_top has CAP_PERFMON, pacman hook in place"
+        return 0
+    fi
+
+    info "waybar's GPU module needs intel_gpu_top to have CAP_PERFMON; without it"
+    info "the module stays blank. A pacman hook keeps it across package updates."
+    ask "Grant it and install the hook?" y || { skip_stage "gpu-monitor"; return 0; }
+
+    run sudo install -Dm644 "$GPU_HOOK_SRC" "$GPU_HOOK_DST" \
+        && ok "installed $GPU_HOOK_DST" \
+        || warn "Could not install the pacman hook."
+    run sudo setcap cap_perfmon+ep /usr/bin/intel_gpu_top \
+        && ok "intel_gpu_top: cap_perfmon+ep" \
+        || warn "setcap failed."
     return 0
 }
 
@@ -1257,6 +1287,15 @@ BINARIES
             || row WARN "swaync.service" "not masked; D-Bus will start a duplicate that fails"
     else
         row SKIPPED "systemd units" "systemctl not available"
+    fi
+    if command -v intel_gpu_top >/dev/null; then
+        if gpu_top_capable; then
+            [[ -f "$GPU_HOOK_DST" ]] \
+                && row OK "intel_gpu_top CAP_PERFMON" "set, pacman hook keeps it" \
+                || row WARN "intel_gpu_top CAP_PERFMON" "set, but no pacman hook; the next update drops it"
+        else
+            row WARN "intel_gpu_top CAP_PERFMON" "missing; waybar GPU module will be blank"
+        fi
     fi
     if command -v scxctl >/dev/null; then
         scx_running \

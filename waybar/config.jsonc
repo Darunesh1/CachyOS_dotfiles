@@ -105,6 +105,10 @@
 	// ── GPU Usage (Intel Iris Xe) ─────────────────────────────────────────────────
 	"custom/gpu": {
 		"exec": "$HOME/.config/waybar/scripts/intel-gpu.sh",
+		// intel_gpu_top needs CAP_PERFMON (install.sh stage 8 + a pacman hook).
+		// If it ever exits, retry instead of leaving the module dead until the
+		// next waybar restart.
+		"restart-interval": 5,
 		"return-type": "json",
 		"format": "󰢹 {}%",
 		"tooltip": false

@@ -1,0 +1,19 @@
+# Keeps the waybar GPU module (waybar/scripts/intel-gpu.sh) working.
+#
+# intel_gpu_top reads the GPU's hardware counters, which the kernel only allows
+# with CAP_PERFMON (kernel.perf_event_paranoid = 2). A file capability lives on
+# the binary itself, so every intel-gpu-tools upgrade replaces the file and
+# drops it -- this re-applies it after each install/upgrade.
+#
+# Installed by install.sh (stage 8) to /etc/pacman.d/hooks/.
+
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Path
+Target = usr/bin/intel_gpu_top
+
+[Action]
+Description = Granting CAP_PERFMON to intel_gpu_top (waybar GPU module)...
+When = PostTransaction
+Exec = /usr/bin/setcap cap_perfmon+ep /usr/bin/intel_gpu_top
