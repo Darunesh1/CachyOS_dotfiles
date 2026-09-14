@@ -6,6 +6,11 @@
 # ~/.config/hotspot.conf by hotspot.sh (never in the repo). Changing them while
 # the hotspot is running restarts it with the new values, so devices reconnect
 # using them.
+#
+# The name/password prompts are rofi with no list, just an input line -- which
+# on its own renders as a thin, easy-to-miss strip with a "Type to filter"
+# placeholder. PROMPT_STYLE turns it into a proper dialog: wider, a real
+# placeholder, and a message line explaining what to type and how to save.
 
 DIR="$(dirname "$(readlink -f "$0")")"
 HOTSPOT="$DIR/hotspot.sh"
@@ -19,6 +24,20 @@ notify() { notify-send "Hotspot" "$@"; }
 # shellcheck source=/dev/null
 source "$HOTSPOT_CONF"
 
+# prompt <title> <placeholder> <message> [extra rofi args...] -> typed text
+prompt() {
+    local title=$1 placeholder=$2 message=$3
+    shift 3
+    rofi -dmenu -p "$title" -mesg "$message" -theme "$THEME" \
+        -theme-str "window { width: 620px; }
+                    mainbox { children: [ inputbar, message ]; }
+                    inputbar { border-radius: 12px 12px 0 0; }
+                    entry { placeholder: \"$placeholder\"; }
+                    message { padding: 10px 14px; }
+                    textbox { text-color: @fg1; }" \
+        "$@" </dev/null
+}
+
 save() {
     ( umask 077
       printf '# Hotspot settings -- edit from the hotspot menu (SUPER + CTRL + H).\n'  > "$HOTSPOT_CONF"
@@ -29,17 +48,27 @@ save() {
     fi
 }
 
+# Status line on top, so you know before trying whether it can start.
 if [[ "$("$HOTSPOT" status)" == on ]]; then
     power="󰀂  Turn hotspot OFF"
+    status="Hotspot is ON  ·  $HOTSPOT_NAME"
 else
     power="󰀂  Turn hotspot ON"
+    IFS='|' read -r ok detail <<<"$("$HOTSPOT" check)"
+    if [[ "$ok" == ok ]]; then
+        status="Hotspot is off  ·  ready to share ($detail)"
+    else
+        status="Hotspot is off  ·  can't share right now:
+$detail"
+    fi
 fi
 name_row="󰏫  Name: $HOTSPOT_NAME"
-pass_row="󰌾  Password: ••••••••"
+pass_row="󰌾  Change password"
 show_row="󰈈  Show password"
 
 choice=$(printf '%s\n' "$power" "$name_row" "$pass_row" "$show_row" \
-    | rofi -dmenu -i -no-custom -p "󰀂  Hotspot" -theme "$THEME")
+    | rofi -dmenu -i -no-custom -p "󰀂  Hotspot" -mesg "$status" -theme "$THEME" \
+        -theme-str 'window { width: 560px; } mainbox { children: [ inputbar, message, listview ]; } message { padding: 8px 14px; } textbox { text-color: @fg1; }')
 
 case "$choice" in
     "$power")
@@ -47,22 +76,24 @@ case "$choice" in
         ;;
 
     "$name_row")
-        # -filter pre-fills the box with the current name; an empty list means
-        # whatever is typed is returned on Enter. Escape returns nothing.
-        new=$(rofi -dmenu -p "New hotspot name" -filter "$HOTSPOT_NAME" -theme "$THEME" </dev/null)
+        # -filter pre-fills the box with the current name.
+        new=$(prompt "󰏫  Hotspot name" "Type the new hotspot name" \
+            "Current name: $HOTSPOT_NAME   ·   1-32 characters   ·   Enter to save, Esc to cancel" \
+            -filter "$HOTSPOT_NAME")
         [[ -z "$new" || "$new" == "$HOTSPOT_NAME" ]] && exit 0
         if (( ${#new} > 32 )); then
-            notify -u critical "Name too long" "A Wi-Fi name can be at most 32 characters."
+            notify -u critical "Name not changed" "A Wi-Fi name can be at most 32 characters; that was ${#new}."
             exit 1
         fi
         HOTSPOT_NAME=$new
         save
-        notify "Name changed" "$HOTSPOT_NAME"
+        notify "Name changed" "The hotspot is now called: $HOTSPOT_NAME"
         ;;
 
     "$pass_row")
-        # -password hides what is typed.
-        new=$(rofi -dmenu -password -p "New password (8-63 characters)" -theme "$THEME" </dev/null)
+        new=$(prompt "󰌾  New password" "Type the new password" \
+            "8-63 characters   ·   typing is hidden   ·   Enter to save, Esc to cancel" \
+            -password)
         [[ -z "$new" ]] && exit 0
         if (( ${#new} < 8 || ${#new} > 63 )); then
             notify -u critical "Password not changed" "WPA2 needs 8-63 characters; that was ${#new}."
@@ -74,7 +105,9 @@ case "$choice" in
         fi
         HOTSPOT_PASSWORD=$new
         save
-        notify "Password changed"
+        # Typing was hidden, so show what was saved -- a typo is caught now,
+        # not when the phone refuses to connect.
+        notify "Password changed" "New password: $HOTSPOT_PASSWORD"
         ;;
 
     "$show_row")

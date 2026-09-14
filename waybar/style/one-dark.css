@@ -137,11 +137,15 @@ window#waybar {
 #custom-updates.medium  { color: #e5c07b; }
 #custom-updates.high    { color: #e06c75; font-weight: 700; }
 
-/* Only rendered while the hotspot is on (hypr/scripts/network/hotspot.sh). */
+/* Hotspot (hypr/scripts/network/hotspot.sh waybar): always shown. Dim when
+   off, struck through when sharing is impossible right now (e.g. Wi-Fi on a
+   DFS channel -- the tooltip says why), green with a device count when on. */
 #custom-hotspot {
-    color: #98c379;
+    color: #5c6370;
     border-right: 1px solid rgba(62, 68, 82, 0.8);
 }
+#custom-hotspot.on          { color: #98c379; font-weight: 700; }
+#custom-hotspot.unavailable { color: #4b515c; text-decoration-line: line-through; }
 
 #custom-network {
     color: #56b6c2;

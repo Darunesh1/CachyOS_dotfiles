@@ -94,7 +94,7 @@ emergency binds: **SUPER+Q** (terminal), **SUPER+R** (run), **SUPER+M** (exit).
 | `SUPER + SHIFT + E` | Find a file by name (rofi, needs `fd`) |
 | `SUPER + B` | Open Firefox |
 | `SUPER + A` | Open app launcher (rofi) |
-| `SUPER + CTRL + H` | Hotspot menu: on/off, edit name and password (shares your Wi-Fi; needs 2.4 GHz or 5 GHz ch 36-48) |
+| `SUPER + CTRL + H` | Hotspot menu: on/off, edit name and password. Shares your Wi-Fi while staying connected; works on 2.4 GHz or 5 GHz ch 36-48 / 149-165, not on radar (DFS) ch 52-144. The waybar 󰀂 icon shows whether it can share right now |
 | `SUPER + CTRL + W` | Wallpaper picker (rofi thumbnail grid; pauses auto-cycle, "Random" resumes it) |
 | `SUPER + .` | Emoji picker |
 | `SUPER + V` | Clipboard history (rofi; `CTRL + SHIFT + DEL` clears it) |

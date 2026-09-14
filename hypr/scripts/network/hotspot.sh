@@ -5,7 +5,8 @@
 #   hotspot.sh on | off | toggle | restart
 #   hotspot.sh status          "on" / "off"
 #   hotspot.sh init            create ~/.config/hotspot.conf with defaults
-#   hotspot.sh waybar          JSON for waybar's custom/hotspot (hidden when off)
+#   hotspot.sh check           "ok|<band ch>" or "no|<why not>" -- can it share now?
+#   hotspot.sh waybar          JSON for waybar's custom/hotspot (always visible)
 #
 # Built on create_ap from linux-wifi-hotspot (AUR), which does the hard parts:
 #   * a virtual AP interface on the same card, so the laptop STAYS connected to
@@ -17,8 +18,8 @@
 # The MT7921 can run the AP and the Wi-Fi connection only on ONE channel
 # ("#channels <= 1" in `iw list`), so the AP must use the channel the laptop is
 # connected on -- and it may not start an AP on a DFS (radar) channel. So on a
-# 5 GHz DFS network (channels 52-144) this refuses with a clear message; the
-# 2.4 GHz network of the same router works.
+# 5 GHz DFS network (channels 52-144) this refuses with a clear message. The
+# router's 2.4 GHz network works, and so does 5 GHz on channels 36-48/149-165.
 #
 # Name and password live in HOTSPOT_CONF (~/.config/hotspot.conf), never in the
 # repo; edit them from hotspot-menu.sh (SUPER + CTRL + H). They reach create_ap
@@ -73,6 +74,36 @@ ap_iface() { iw dev 2>/dev/null | awk '/Interface/ {i=$2} /type AP/ {print i; ex
 
 is_on() { [[ -n "$(ap_iface)" ]]; }
 
+# Can this laptop share its Wi-Fi right now? Sets SHARE_OK (1/0), SHARE_IFACE,
+# SHARE_DESC ("2.4 GHz ch 6") and, when it can't, SHARE_REASON.
+# The card's regulatory table (`iw phy phy0 channels`) flags 52-64 and 100-144
+# as "Radar detection" (DFS): a hotspot may not be STARTED there, only joined.
+# 1-14, 36-48 and 149-165 carry no such flag.
+share_check() {
+    local chan
+    SHARE_OK=0 SHARE_DESC="" SHARE_REASON=""
+    SHARE_IFACE=$(wifi_iface)
+    if [[ -z "$SHARE_IFACE" ]]; then
+        SHARE_REASON="No Wi-Fi device found."
+        return
+    fi
+    chan=$(iw dev "$SHARE_IFACE" info 2>/dev/null | awk '/channel/ {print $2; exit}')
+    if [[ -z "$chan" ]]; then
+        SHARE_REASON="Not connected to Wi-Fi -- the hotspot shares this laptop's Wi-Fi connection."
+        return
+    fi
+    if (( chan <= 14 )); then
+        SHARE_DESC="2.4 GHz ch $chan"
+    else
+        SHARE_DESC="5 GHz ch $chan"
+    fi
+    if (( chan <= 14 || (chan >= 36 && chan <= 48) || (chan >= 149 && chan <= 165) )); then
+        SHARE_OK=1
+    else
+        SHARE_REASON="Your Wi-Fi is on 5 GHz channel $chan, a radar (DFS) channel where this card may not start a hotspot. Set the router's 5 GHz channel to 36-48 or 149-165, or connect to its 2.4 GHz network."
+    fi
+}
+
 # ── Actions ─────────────────────────────────────────────────────────────────
 start() {
     if ! command -v create_ap >/dev/null; then
@@ -82,20 +113,14 @@ start() {
     # ("restart" is the one case where it is expected to be running already.)
     [[ "${1:-}" != restart ]] && is_on && { notify "Already on"; return 0; }
 
-    local iface chan
-    iface=$(wifi_iface)
-    [[ -n "$iface" ]] || { notify -u critical "No Wi-Fi device found"; return 1; }
-
-    chan=$(iw dev "$iface" info 2>/dev/null | awk '/channel/ {print $2; exit}')
-    if [[ -z "$chan" ]]; then
-        notify -u critical "Connect to a Wi-Fi network first" "The hotspot shares this laptop's Wi-Fi connection."
+    local iface
+    share_check
+    if (( ! SHARE_OK )); then
+        notify -u critical "Can't start the hotspot" "$SHARE_REASON"
+        refresh_waybar
         return 1
     fi
-    if (( chan >= 52 && chan <= 144 )); then
-        notify -u critical "Can't share this Wi-Fi network" \
-            "It is on 5 GHz channel $chan, a DFS (radar) channel where this Wi-Fi card may not start a hotspot. Connect to the router's 2.4 GHz network (or a 5 GHz channel 36-48) and try again."
-        return 1
-    fi
+    iface=$SHARE_IFACE
 
     load_settings
     ( umask 077
@@ -130,19 +155,27 @@ stop() {
     refresh_waybar
 }
 
+# Always visible: dim when off, struck through when sharing is impossible right
+# now (with the reason in the tooltip), green with a device count when on.
+json_escape() { local s=${1//\\/\\\\}; printf '%s' "${s//\"/\\\"}"; }
+
 waybar_json() {
-    local ap clients=0 name
+    local ap clients=0
     ap=$(ap_iface)
-    if [[ -z "$ap" ]]; then
-        printf '{"text":"","class":"off"}\n'
+    if [[ -n "$ap" ]]; then
+        load_settings
+        clients=$(iw dev "$ap" station dump 2>/dev/null | grep -c '^Station')
+        printf '{"text":"󰀂 %s","class":"on","tooltip":"Hotspot ON: %s\\n%s device(s) connected\\nClick for the hotspot menu"}\n' \
+            "$clients" "$(json_escape "$HOTSPOT_NAME")" "$clients"
         return
     fi
-    load_settings
-    clients=$(iw dev "$ap" station dump 2>/dev/null | grep -c '^Station')
-    name=${HOTSPOT_NAME//\\/\\\\}
-    name=${name//\"/\\\"}
-    printf '{"text":"󰀂 %s","class":"on","tooltip":"Hotspot: %s\\n%s device(s) connected\\nClick for the hotspot menu"}\n' \
-        "$clients" "$name" "$clients"
+    share_check
+    if (( SHARE_OK )); then
+        printf '{"text":"󰀂","class":"off","tooltip":"Hotspot off · ready to share (%s)\\nClick for the hotspot menu"}\n' "$SHARE_DESC"
+    else
+        printf '{"text":"󰀂","class":"unavailable","tooltip":"Hotspot off · can'"'"'t share right now\\n%s\\nClick for the hotspot menu"}\n' \
+            "$(json_escape "$SHARE_REASON")"
+    fi
 }
 
 case "${1:-toggle}" in
@@ -152,6 +185,8 @@ case "${1:-toggle}" in
     restart) if is_on; then start restart; fi ;;
     status)  if is_on; then echo on; else echo off; fi ;;
     init)    load_settings ;;   # create ~/.config/hotspot.conf with defaults if missing
+    check)   share_check      # "ok|2.4 GHz ch 6" or "no|<reason>", for the menu
+             if (( SHARE_OK )); then echo "ok|$SHARE_DESC"; else echo "no|$SHARE_REASON"; fi ;;
     waybar)  waybar_json ;;
     *)       echo "Usage: $0 on|off|toggle|restart|status|waybar" >&2; exit 1 ;;
 esac

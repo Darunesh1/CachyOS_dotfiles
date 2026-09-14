@@ -64,9 +64,10 @@
 	},
 
 	// ── Hotspot ──────────────────────────────────────────────────────────────────
-	// Hidden unless the hotspot is on; then "󰀂 N" with N connected devices.
+	// Always shown: dim when off, struck through when sharing is impossible
+	// right now (tooltip says why), green "󰀂 N" with N devices when on.
 	// Updates instantly on on/off (hotspot.sh sends RTMIN+10); otherwise one
-	// `iw` call a minute, which also refreshes the connected-device count.
+	// check a minute, which also refreshes the device count.
 	// Click: hotspot menu (SUPER + CTRL + H).
 	"custom/hotspot": {
 		"exec": "$HOME/.config/hypr/scripts/network/hotspot.sh waybar",
