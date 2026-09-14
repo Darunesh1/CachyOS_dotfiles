@@ -18,14 +18,21 @@
 #
 # Reacts instantly to NetworkManager events (`nmcli monitor`), and re-reads at
 # least every TICK seconds for the signal % and the speed shown in the tooltip.
-# How fast a drop *during* a session is noticed is NM's check interval
-# (packages/NetworkManager/30-connectivity-interval.conf -> 60 s).
+#
+# NetworkManager itself only re-tests the internet every 5 minutes once it has
+# seen it working, so turning off a phone hotspot's mobile data went unnoticed
+# for minutes. While a link is up this script therefore asks NM to re-check
+# every CHECK_EVERY seconds (and straight after connecting) -- in the
+# background, never more than one at a time. That needs no sudo; the optional
+# packages/NetworkManager/30-connectivity-interval.conf only tightens NM's own
+# timer for other readers such as nm-applet.
 #
 #   network-status.sh            stream JSON for waybar
 #   network-status.sh --click    login page if behind a portal, else Wi-Fi settings
 #   network-status.sh --recheck  make NetworkManager re-check the internet now
 
 TICK=3
+CHECK_EVERY=30
 LAST_FILE="${XDG_RUNTIME_DIR:-/tmp}/network-status.last"
 PORTAL_URL="http://neverssl.com"
 
@@ -60,6 +67,17 @@ json_escape() { local s=${1//\\/\\\\}; printf '%s' "${s//\"/\\\"}"; }
 
 prev_rx=0 prev_tx=0 prev_t=0 prev_if=""
 last_json=""
+check_pid=0 last_check=0 prev_devstate=""
+
+# Ask NetworkManager to re-test the internet now, in the background. With no
+# internet a check waits for its HTTP timeout, so never stack a second one on
+# a check that is still running. The result arrives as a monitor event.
+request_check() {
+    (( check_pid > 0 )) && kill -0 "$check_pid" 2>/dev/null && return
+    nmcli networking connectivity check >/dev/null 2>&1 &
+    check_pid=$!
+    last_check=$EPOCHSECONDS
+}
 
 emit() {
     local state conn line dev type dstate name iface="" kind="" devstate=""
@@ -74,6 +92,14 @@ emit() {
     done < <(nmcli -t -f DEVICE,TYPE,STATE,CONNECTION device 2>/dev/null)
 
     conn="$(connectivity)"
+
+    # Re-test straight after (re)connecting, then every CHECK_EVERY seconds.
+    if [[ "$devstate" == connected ]]; then
+        if [[ "$prev_devstate" != connected ]] || (( EPOCHSECONDS - last_check >= CHECK_EVERY )); then
+            request_check
+        fi
+    fi
+    prev_devstate=$devstate
 
     # ── Signal (Wi-Fi only; --rescan no never triggers a scan) ─────────────
     if [[ "$kind" == wifi && "$devstate" == connected ]]; then
@@ -165,8 +191,14 @@ monitor_pid=$!
 # When waybar restarts, our next write hits a closed pipe (SIGPIPE). Take the
 # nmcli monitor child down with us, or it lingers until NetworkManager's next
 # event -- one stray process per waybar restart.
-trap 'kill "$monitor_pid" 2>/dev/null; exit 0' PIPE TERM INT HUP
-trap 'kill "$monitor_pid" 2>/dev/null' EXIT
+# Guarded: check_pid is 0 until the first check, and `kill 0` would signal the
+# whole process group -- waybar included.
+cleanup() {
+    kill "$monitor_pid" 2>/dev/null
+    (( check_pid > 0 )) && kill "$check_pid" 2>/dev/null
+}
+trap 'cleanup; exit 0' PIPE TERM INT HUP
+trap cleanup EXIT
 while true; do
     read -r -t "$TICK" -u 3 _
     # 1 = EOF: NetworkManager went away. Exit and let waybar's

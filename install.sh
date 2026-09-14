@@ -859,9 +859,9 @@ stage_services() {
     return 0
 }
 
-# waybar's "no internet" badge reads NetworkManager's connectivity state. NM
-# re-checks only every 300 s by default, so a drop mid-session could take five
-# minutes to show; this drops it to 60 s.
+# NetworkManager re-tests the internet only every 300 s by default. The waybar
+# network module already asks for a re-check every 30 s itself (no sudo), so
+# this is optional: it tightens NM's own timer for other readers (nm-applet).
 NM_CONN_SRC="$REPO/packages/NetworkManager/30-connectivity-interval.conf"
 NM_CONN_DST="/etc/NetworkManager/conf.d/30-connectivity-interval.conf"
 
@@ -873,9 +873,10 @@ setup_nm_connectivity() {
         return 0
     fi
 
-    info "waybar shows \"no internet\" from NetworkManager's connectivity check,"
-    info "which by default re-runs only every 5 minutes."
-    ask "Re-check every 60 s instead?" y || { skip_stage "nm-connectivity"; return 0; }
+    info "Optional: NetworkManager re-tests the internet only every 5 minutes. The"
+    info "waybar Wi-Fi icon already re-checks every 30 s itself; this also speeds"
+    info "up NM's own timer (e.g. for nm-applet)."
+    ask "Set NetworkManager's check interval to 60 s?" n || { skip_stage "nm-connectivity"; return 0; }
 
     run sudo install -Dm644 "$NM_CONN_SRC" "$NM_CONN_DST" \
         && run sudo systemctl reload NetworkManager \
@@ -1316,8 +1317,8 @@ BINARIES
     fi
     if command -v NetworkManager >/dev/null; then
         cmp -s "$NM_CONN_SRC" "$NM_CONN_DST" \
-            && row OK "NM connectivity interval" "60 s (no-internet badge)" \
-            || row WARN "NM connectivity interval" "default 300 s; no-internet badge can lag 5 min"
+            && row OK "NM connectivity interval" "60 s" \
+            || row OK "NM connectivity interval" "default 300 s (waybar re-checks every 30 s itself)"
     fi
     if command -v intel_gpu_top >/dev/null; then
         if gpu_top_capable; then
