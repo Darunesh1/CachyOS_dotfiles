@@ -21,6 +21,8 @@
 #   * swaync Do Not Disturb on
 #   * the wallpaper cycle frozen (SIGSTOP), so no wallust run + hyprctl reload
 #     lands in the middle of a game every 200 s
+#   * the waybar network module frozen too: zero CPU while gaming. The bar
+#     keeps its last icon; internet re-checks resume when Game Mode ends.
 #
 # Everything that is changed is saved first and restored exactly on "off" --
 # including whichever power profile was active before, not always balanced.
@@ -31,6 +33,9 @@ SCRIPTS="$(dirname "$(readlink -f "$0")")"
 # also SIGSTOP anything that merely mentions the path, like an editor with the
 # script open or a shell whose command line contains it.
 CYCLE_PATTERN='^(/usr)?/bin/bash [^ ]*/wallpaper/awww-cycle\.sh$'
+# waybar starts its custom scripts as plain `bash <path>`. The trailing $ keeps
+# the --click / --recheck runs of the same script from ever being matched.
+NETWORK_PATTERN='^([^ ]*/)?bash [^ ]*/waybar/scripts/network-status\.sh$'
 
 have() { command -v "$1" >/dev/null 2>&1; }
 notify() { have notify-send && notify-send "Game Mode" "$1"; }
@@ -70,6 +75,7 @@ enable() {
     # SIGSTOP the loop itself: its current `sleep` child finishes, and then
     # the loop simply does not continue until SIGCONT.
     pkill -STOP -f "$CYCLE_PATTERN"
+    pkill -STOP -f "$NETWORK_PATTERN"
 
     touch "$STATE_DIR/active"
 
@@ -86,6 +92,7 @@ disable() {
     is_on || return 0
 
     pkill -CONT -f "$CYCLE_PATTERN"
+    pkill -CONT -f "$NETWORK_PATTERN"
 
     if have swaync-client && [[ "$(saved dnd)" == "false" ]]; then
         swaync-client -df >/dev/null

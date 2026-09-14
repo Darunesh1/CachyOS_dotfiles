@@ -140,6 +140,8 @@ Access via `SUPER + SHIFT + G`:
     games skip compositing
   - notifications on Do Not Disturb; the wallpaper cycle paused so no wallust
     run or `hyprctl reload` hits mid-game
+  - the waybar Wi-Fi module paused (zero CPU): it keeps its last icon, and
+    "no internet" changes show once Game Mode is turned off
   - turning it off restores exactly what was there before, including the
     previous profile. Picking another profile while it's on ends it first.
 
