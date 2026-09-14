@@ -1198,6 +1198,7 @@ intel_gpu_top|waybar custom/gpu
 fd|file finder (SUPER+SHIFT+E)
 jq|window switcher (SUPER+Tab)
 udiskie|removable media automount
+create_ap|Wi-Fi hotspot (SUPER+CTRL+H), from linux-wifi-hotspot
 nm-applet|network tray icon (autostart)
 blueman-applet|bluetooth tray icon (autostart)
 notify-send|notifications from scripts and ocr-snipper

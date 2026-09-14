@@ -8,3 +8,5 @@ awww                    # wallpaper daemon. NOT "awww-daemon" -- that is the
                         # awww and awww-daemon.
 wallust-git             # the colour-generation engine behind all the theming
 rofimoji                # emoji picker (SUPER+.)
+linux-wifi-hotspot      # create_ap: Wi-Fi hotspot that keeps the laptop online
+                        # (SUPER+CTRL+H, hypr/scripts/network/hotspot.sh)

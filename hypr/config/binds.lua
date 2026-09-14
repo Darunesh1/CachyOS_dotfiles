@@ -45,6 +45,8 @@ hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(L.fileManager))
 hl.bind(mainMod .. " + SHIFT + E", hl.dsp.exec_cmd(L.scripts .. "/rofi/find-file.sh"))
 hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("firefox"))
 hl.bind(mainMod .. " + A", hl.dsp.exec_cmd(L.menu))
+-- Hotspot menu: on/off, change name and password
+hl.bind(mainMod .. " + CTRL + H", hl.dsp.exec_cmd(L.scripts .. "/network/hotspot-menu.sh"))
 -- Wallpaper picker (pauses auto-cycle; "Random" resumes it)
 hl.bind(mainMod .. " + CTRL + W", hl.dsp.exec_cmd(L.scripts .. "/wallpaper/wallpaper-menu.sh"))
 -- ── Emoji Picker ────────────────────────────────────────────────────────────

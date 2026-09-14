@@ -16,6 +16,7 @@
 	"modules-center": ["clock", "custom/coffee"],
 	"modules-right": [
 		"custom/updates",
+		"custom/hotspot",
 		"custom/network",
 		"pulseaudio",
 		"backlight",
@@ -60,6 +61,19 @@
 		"interval": 3600,
 		"on-click": "kitty -e sudo pacman -Syu",
 		"tooltip": true
+	},
+
+	// ── Hotspot ──────────────────────────────────────────────────────────────────
+	// Hidden unless the hotspot is on; then "󰀂 N" with N connected devices.
+	// Updates instantly on on/off (hotspot.sh sends RTMIN+10); otherwise one
+	// `iw` call a minute, which also refreshes the connected-device count.
+	// Click: hotspot menu (SUPER + CTRL + H).
+	"custom/hotspot": {
+		"exec": "$HOME/.config/hypr/scripts/network/hotspot.sh waybar",
+		"return-type": "json",
+		"interval": 60,
+		"signal": 10,
+		"on-click": "$HOME/.config/hypr/scripts/network/hotspot-menu.sh"
 	},
 
 	// ── Network: Wi-Fi symbol + whether the internet actually works ──────────────

@@ -31,6 +31,7 @@ window#waybar {
 #workspaces,
 #window,
 #custom-updates,
+#custom-hotspot,
 #custom-network,
 #pulseaudio,
 #backlight,
@@ -135,6 +136,12 @@ window#waybar {
 #custom-updates.low     { color: #98c379; }
 #custom-updates.medium  { color: #e5c07b; }
 #custom-updates.high    { color: #e06c75; font-weight: 700; }
+
+/* Only rendered while the hotspot is on (hypr/scripts/network/hotspot.sh). */
+#custom-hotspot {
+    color: #98c379;
+    border-right: 1px solid rgba(62, 68, 82, 0.8);
+}
 
 #custom-network {
     color: #56b6c2;

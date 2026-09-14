@@ -45,6 +45,10 @@ Modular Hyprland configuration written in **Lua**.
     │   ├── powerprofile-status.sh # Status output for waybar
     │   └── battery-notify.sh      # Battery notification daemon
     │
+    ├── network/
+    │   ├── hotspot.sh             # Wi-Fi hotspot on/off via create_ap (keeps Wi-Fi up)
+    │   └── hotspot-menu.sh        # Rofi menu: toggle, edit name and password
+    │
     ├── recording/
     │   ├── screen-record.sh       # Toggle region screen recording (wf-recorder)
     │   └── screen-record-hq.sh    # Same, high-quality profile
@@ -90,6 +94,7 @@ emergency binds: **SUPER+Q** (terminal), **SUPER+R** (run), **SUPER+M** (exit).
 | `SUPER + SHIFT + E` | Find a file by name (rofi, needs `fd`) |
 | `SUPER + B` | Open Firefox |
 | `SUPER + A` | Open app launcher (rofi) |
+| `SUPER + CTRL + H` | Hotspot menu: on/off, edit name and password (shares your Wi-Fi; needs 2.4 GHz or 5 GHz ch 36-48) |
 | `SUPER + CTRL + W` | Wallpaper picker (rofi thumbnail grid; pauses auto-cycle, "Random" resumes it) |
 | `SUPER + .` | Emoji picker |
 | `SUPER + V` | Clipboard history (rofi; `CTRL + SHIFT + DEL` clears it) |
