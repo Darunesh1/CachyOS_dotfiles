@@ -1363,13 +1363,11 @@ BINARIES
     # ── Hardware ────────────────────────────────────────────────────────────
     # Always a reminder: these cannot be verified, only compared.
     group "Hardware-specific (always check by hand)"
-    local cfg_out real_out cfg_if real_if
+    local cfg_out real_out
     cfg_out="$(grep -oE 'output[[:space:]]*=[[:space:]]*"[^"]+"' "$REPO/hypr/config/monitors.lua" | head -1 | grep -oE '"[^"]+"' | tr -d '"')"
     real_out="$(hyprctl monitors 2>/dev/null | awk '/^Monitor/ {print $2; exit}' || true)"
     row WARN "monitors.lua output" "config: ${cfg_out:-?}${real_out:+   detected: $real_out}"
-    cfg_if="$(grep -oE '"interface"[[:space:]]*:[[:space:]]*"[^"]+"' "$REPO/waybar/config.jsonc" | head -1 | grep -oE '"[^"]+"$' | tr -d '"')"
-    real_if="$(ip -o link 2>/dev/null | awk -F': ' '$2 ~ /^wl/ {print $2; exit}' || true)"
-    row WARN "waybar network interface" "config: ${cfg_if:-?}${real_if:+   detected: $real_if}"
+    # (No waybar interface row: custom/network auto-detects the Wi-Fi device.)
     return 0
 }
 
@@ -1402,10 +1400,9 @@ print_summary() {
     printf '  %sNext:%s\n' "$C_BOLD" "$C_RESET"
     note "1. Set your monitor in hypr/config/monitors.lua"
     note "   (run 'hyprctl monitors' from inside Hyprland to get the name)"
-    note "2. Check the network interface in waybar/config.jsonc"
-    note "3. Start Hyprland: pick it at your display manager, or 'exec Hyprland' from a TTY"
+    note "2. Start Hyprland: pick it at your display manager, or 'exec Hyprland' from a TTY"
     if [[ "${SHELL:-}" != "$(command -v zsh 2>/dev/null)" ]]; then
-        note "4. Log out and back in for the zsh login shell to take effect"
+        note "3. Log out and back in for the zsh login shell to take effect"
     fi
     echo
     note "Audit this setup any time with:  ./install.sh --check"

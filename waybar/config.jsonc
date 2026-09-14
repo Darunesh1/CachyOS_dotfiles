@@ -16,8 +16,7 @@
 	"modules-center": ["clock", "custom/coffee"],
 	"modules-right": [
 		"custom/updates",
-		"network",
-		"custom/internet",
+		"custom/network",
 		"pulseaudio",
 		"backlight",
 		"cpu",
@@ -63,28 +62,18 @@
 		"tooltip": true
 	},
 
-	// ── Network (WiFi signal % + internet state) ──────────────────────────────────
-	"network": {
-		"interface": "wlan0",
-		"format-wifi": "󰤨 {signalStrength}%",
-		"format-ethernet": "󰊗 {ipaddr}",
-		"format-disconnected": "󰤭 off",
-		"tooltip-format-wifi": "{essid}  ·  {signalStrength}%\n↓ {bandwidthDownBytes}  ↑ {bandwidthUpBytes}\n{frequency} GHz",
-		"tooltip-format-ethernet": "{ifname} · {ipaddr}\n↓ {bandwidthDownBytes}  ↑ {bandwidthUpBytes}",
-		"tooltip-format-disconnected": "Disconnected",
-		"on-click": "nm-connection-editor",
-		"interval": 2
-	},
-
-	// ── Internet reachability ─────────────────────────────────────────────────────
-	// Hidden while the internet works. Shows "no internet" / "login" when
-	// NetworkManager's connectivity check fails, so a connected-but-dead Wi-Fi
-	// is visible. Click: re-check now (and open the login page if in a portal).
-	"custom/internet": {
-		"exec": "$HOME/.config/waybar/scripts/internet-status.sh",
+	// ── Network: Wi-Fi symbol + whether the internet actually works ──────────────
+	// Replaces the built-in network module, which only knew the link was up.
+	// Signal % shows only while the internet works; otherwise the symbol itself
+	// changes (no internet / login page / not connected / off). See the script.
+	// Click: Wi-Fi settings (or the login page behind a portal).
+	// Right-click: re-check the internet now.
+	"custom/network": {
+		"exec": "$HOME/.config/waybar/scripts/network-status.sh",
 		"return-type": "json",
 		"restart-interval": 5,
-		"on-click": "$HOME/.config/waybar/scripts/internet-status.sh --click"
+		"on-click": "$HOME/.config/waybar/scripts/network-status.sh --click",
+		"on-click-right": "$HOME/.config/waybar/scripts/network-status.sh --recheck"
 	},
 
 	// ── Volume ────────────────────────────────────────────────────────────────────

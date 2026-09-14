@@ -31,7 +31,7 @@ window#waybar {
 #workspaces,
 #window,
 #custom-updates,
-#network,
+#custom-network,
 #pulseaudio,
 #backlight,
 #cpu,
@@ -136,25 +136,18 @@ window#waybar {
 #custom-updates.medium  { color: #e5c07b; }
 #custom-updates.high    { color: #e06c75; font-weight: 700; }
 
-#network {
+#custom-network {
     color: #56b6c2;
     border-right: 1px solid rgba(62, 68, 82, 0.8);
 }
 
-#network.disconnected { color: #e06c75; }
-
-/* Connected but no internet (waybar/scripts/internet-status.sh). The module is
-   hidden while the internet works, so these only ever render as a warning,
-   sitting in the same pill row right after #network. */
-#custom-internet {
-    background: rgba(30, 33, 39, 0.88);
-    padding: 4px 12px;
-    margin: 4px 0;
-    font-weight: 700;
-    border-right: 1px solid rgba(62, 68, 82, 0.8);
-}
-#custom-internet.limited { color: #e06c75; }
-#custom-internet.portal  { color: #e5c07b; }
+/* waybar/scripts/network-status.sh sets the class. Fixed colours, not wallust
+   ones: a warning must look like a warning whatever the wallpaper palette. */
+#custom-network.limited,
+#custom-network.disconnected { color: #e06c75; font-weight: 700; }
+#custom-network.portal       { color: #e5c07b; font-weight: 700; }
+#custom-network.connecting   { color: #e5c07b; }
+#custom-network.off          { color: #5c6370; }
 
 #pulseaudio {
     color: #abb2bf;
@@ -225,7 +218,7 @@ window#waybar {
     letter-spacing: 0.5px;
 }
 /* Safely curve the network module only when updates are hidden */
-.modules-right > widget:first-child > #network {
+.modules-right > widget:first-child > #custom-network {
     border-radius: 10px 0 0 10px;
 }
 /* Coffee Mode */

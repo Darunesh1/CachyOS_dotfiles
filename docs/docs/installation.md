@@ -92,7 +92,6 @@ missing, so it works in a script. Reach for it whenever something stops working.
 
   Hardware-specific (always check by hand)
     [ WARN  ] monitors.lua output               config: eDP-1   detected: eDP-1
-    [ WARN  ] waybar network interface          config: wlan0   detected: wlan0
 ```
 
 Statuses read as: **OK** — correct. **MISSING** — broken, and the detail column
@@ -283,7 +282,8 @@ hl.monitor({
 })
 ```
 
-Check `waybar/config.jsonc` too — the network module is pinned to `wlan0`.
+The waybar network module finds your Wi-Fi or ethernet device by itself, so
+there is no interface name to set.
 
 ### 8. Start Hyprland
 
