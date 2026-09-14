@@ -58,14 +58,6 @@ human_rate() {
 
 json_escape() { local s=${1//\\/\\\\}; printf '%s' "${s//\"/\\\"}"; }
 
-# Enlarge just the glyph (Pango markup; waybar renders it in custom modules),
-# leaving the "80%" beside it at the bar's normal size. Warning glyphs get a
-# bigger boost -- they stand alone and must be noticed at a glance. The small
-# negative rise keeps the larger glyph centred on the text baseline.
-ICON_SIZE="135%"
-ALERT_SIZE="160%"
-glyph() { printf "<span size='%s' rise='-1pt'>%s</span>" "${2:-$ICON_SIZE}" "$1"; }
-
 prev_rx=0 prev_tx=0 prev_t=0 prev_if=""
 last_json=""
 
@@ -124,21 +116,21 @@ emit() {
     case "$state" in
         full)
             if [[ "$kind" == ethernet ]]; then
-                text=$(glyph "󰈀")
+                text="󰈀"
             else
                 if   (( sig >= 75 )); then icon="󰤨"
                 elif (( sig >= 50 )); then icon="󰤥"
                 elif (( sig >= 25 )); then icon="󰤢"
                 else                       icon="󰤟"; fi
-                text="$(glyph "$icon") ${sig}%"
+                text="$icon ${sig}%"
             fi
             tooltip="Connected · internet OK"
             ;;
-        limited)      text=$(glyph "$([[ $kind == ethernet ]] && echo "󰈀" || echo "󰤫")" "$ALERT_SIZE"); tooltip="Connected, but NO INTERNET\nRight-click to re-check" ;;
-        portal)       text=$(glyph "󰤬" "$ALERT_SIZE"); tooltip="Login page required\nClick to open it" ;;
-        connecting)   text=$(glyph "󰤯"); tooltip="Connecting…" ;;
-        disconnected) text=$(glyph "󰤮" "$ALERT_SIZE"); tooltip="Not connected\nClick for Wi-Fi settings" ;;
-        off)          text=$(glyph "󰖪"); tooltip="Wi-Fi is off" ;;
+        limited)      text=$([[ $kind == ethernet ]] && echo "󰈀" || echo "󰤫"); tooltip="Connected, but NO INTERNET\nRight-click to re-check" ;;
+        portal)       text="󰤬"; tooltip="Login page required\nClick to open it" ;;
+        connecting)   text="󰤯"; tooltip="Connecting…" ;;
+        disconnected) text="󰤮"; tooltip="Not connected\nClick for Wi-Fi settings" ;;
+        off)          text="󰖪"; tooltip="Wi-Fi is off" ;;
     esac
     class=$state
 

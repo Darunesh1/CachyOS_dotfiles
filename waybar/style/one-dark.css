@@ -143,19 +143,9 @@ window#waybar {
 
 /* waybar/scripts/network-status.sh sets the class. Fixed colours, not wallust
    ones: a warning must look like a warning whatever the wallpaper palette. */
-/* Warnings also tint the whole pill, so they register even in peripheral
-   vision -- the same 18% red wash as the power button's hover. */
 #custom-network.limited,
-#custom-network.disconnected {
-    color: #e06c75;
-    font-weight: 700;
-    background: rgba(224, 108, 117, 0.22);
-}
-#custom-network.portal {
-    color: #e5c07b;
-    font-weight: 700;
-    background: rgba(229, 192, 123, 0.20);
-}
+#custom-network.disconnected { color: #e06c75; font-weight: 700; }
+#custom-network.portal       { color: #e5c07b; font-weight: 700; }
 #custom-network.connecting   { color: #e5c07b; }
 #custom-network.off          { color: #5c6370; }
 
