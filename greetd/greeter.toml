@@ -1,0 +1,12 @@
+# noctalia-greeter -- the login screen (greetd + noctalia-greeter, the CachyOS
+# Hyprland default). install.sh stage 8 copies this to
+# /var/lib/noctalia-greeter/greeter.toml. It is a copy, not a symlink: the
+# greeter runs as its own user and cannot read $HOME. After editing, re-run
+# stage 8 (or `sudo install -o greeter -g greeter -m 0640 ...` by hand); it
+# applies the next time the login screen starts.
+#
+# Left alone the greeter guesses 1.5x scale on this 1920x1080 / 340 mm panel,
+# so the login screen looks zoomed in. Match the desktop: Hyprland runs eDP-1
+# at 1.
+[output]
+scale = 1.0

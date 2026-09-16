@@ -122,7 +122,8 @@ Stages (each is prompted and skippable):
    5. Zsh               ~/.zshenv, history, zinit pre-warm, chsh
    6. Paths             rewrite the two files that hardcode a username
    7. Theme             pick a wallpaper and run wallust
-   8. Services          gcr-ssh-agent, swaync mask, scx_lavd, GPU monitor, NM check interval
+   8. Services          gcr-ssh-agent, swaync mask, scx_lavd, GPU monitor, NM check interval,
+                        login screen scale
    9. Extras            ocr-snipper (ALT+X), the nvim config, Lutris game-performance prefix
   10. Check             audit what is actually in place, then summarise
 USAGE
@@ -856,6 +857,45 @@ stage_services() {
     setup_scx_loader
     setup_gpu_monitor
     setup_nm_connectivity
+    setup_greeter
+    return 0
+}
+
+# Login screen: greetd + noctalia-greeter (the CachyOS Hyprland default). Left
+# alone it guesses 1.5x scale on this panel, so everything on it looks zoomed
+# in. greetd/greeter.toml pins it to 1x like the desktop. It is copied, not
+# symlinked: the greeter runs as its own user and cannot read $HOME.
+GREETER_SRC="$REPO/greetd/greeter.toml"
+GREETER_DST="/var/lib/noctalia-greeter/greeter.toml"
+
+# Scale the greeter used at this boot, e.g. "1.00" -- from the journal, which,
+# unlike $GREETER_DST, is readable without root.
+greeter_scale() {
+    journalctl -b -t noctalia-greeter-compositor 2>/dev/null \
+        | grep -o 'eDP-[0-9]* scale=[0-9.]*' | tail -1 | sed 's/.*scale=//'
+}
+
+setup_greeter() {
+    [[ -x /usr/bin/noctalia-greeter-session ]] || return 0
+
+    local scale
+    scale="$(greeter_scale)"
+    if [[ "$scale" == "1.00" ]]; then
+        ok "login screen at 100% scale"
+        return 0
+    fi
+
+    info "The login screen (noctalia-greeter) draws everything at ${C_BOLD}${scale:-?}x${C_RESET}"
+    info "scale, so it looks zoomed in. $GREETER_DST can pin it to 1x."
+    ask "Install the repo's greeter.toml (the old one is backed up)?" y || { skip_stage "greeter"; return 0; }
+
+    if sudo test -f "$GREETER_DST" && ! sudo cmp -s "$GREETER_SRC" "$GREETER_DST"; then
+        run sudo cp -a "$GREETER_DST" "$GREETER_DST.bak.$(date +%Y%m%d-%H%M%S)" \
+            && ok "backed up the old $GREETER_DST"
+    fi
+    run sudo install -o greeter -g greeter -m 0640 "$GREETER_SRC" "$GREETER_DST" \
+        && ok "installed $GREETER_DST (applies at the next login screen)" \
+        || warn "Could not install $GREETER_DST."
     return 0
 }
 
@@ -1315,6 +1355,17 @@ BINARIES
             || row WARN "swaync.service" "not masked; D-Bus will start a duplicate that fails"
     else
         row SKIPPED "systemd units" "systemctl not available"
+    fi
+    if [[ -x /usr/bin/noctalia-greeter-session ]]; then
+        local gscale
+        gscale="$(greeter_scale)"
+        if [[ "$gscale" == "1.00" ]]; then
+            row OK "login screen scale" "1x"
+        elif [[ -z "$gscale" ]]; then
+            row SKIPPED "login screen scale" "no greeter log this boot"
+        else
+            row WARN "login screen scale" "${gscale}x at this boot (zoomed); stage 8 fixes it, applies at next login"
+        fi
     fi
     if command -v NetworkManager >/dev/null; then
         cmp -s "$NM_CONN_SRC" "$NM_CONN_DST" \

@@ -223,6 +223,14 @@ not lost: it stays in the control center (the bell in Waybar). Everything else
 falls back to `/etc/xdg/swaync/`, styling included. Reload with
 `swaync-client -R`.
 
+**The login screen is greetd + noctalia-greeter** (the CachyOS default). It
+guesses 1.5x scale on this panel, so everything on it looked huge; the
+resolution was always right. `greetd/greeter.toml` pins `[output] scale = 1.0`,
+matching Hyprland. Stage 8 of `install.sh` copies it to
+`/var/lib/noctalia-greeter/greeter.toml` (a copy, because the greeter user
+cannot read `$HOME`), backing up any existing file. `./install.sh --check`
+reads the scale the greeter actually used from this boot's journal.
+
 **The power menu is Rofi** (`scripts/power/power-menu.sh`), not wlogout. Logout
 runs `hyprctl dispatch exit` rather than `loginctl terminate-user`, which polkit
 rates `auth_admin_keep` and would demand a password just to log out. Shutdown,
