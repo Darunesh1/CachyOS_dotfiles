@@ -31,7 +31,11 @@ RUN_CONF="${XDG_RUNTIME_DIR:-/tmp}/hotspot-create_ap.conf"
 LOG_FILE="/tmp/hotspot-create_ap.log"
 SELF="$(readlink -f "$0")"
 
-notify() { notify-send "Hotspot" "$@"; }
+# "Hotspot" as the app name, not as the summary: with it as the summary,
+# notify() <title> <body> passed notify-send three positional arguments and it
+# refused the whole thing with "Invalid number of options" -- so the on/off and
+# password notifications never appeared.
+notify() { notify-send -a "Hotspot" "$@"; }
 refresh_waybar() { pkill -RTMIN+10 waybar 2>/dev/null; }
 
 # ── Privileged part: run through pkexec, one password prompt per action ─────
@@ -107,7 +111,7 @@ share_check() {
 # ── Actions ─────────────────────────────────────────────────────────────────
 start() {
     if ! command -v create_ap >/dev/null; then
-        notify -u critical "linux-wifi-hotspot is not installed" "Install it with: yay -S linux-wifi-hotspot"
+        notify "linux-wifi-hotspot is not installed" "Install it with: yay -S linux-wifi-hotspot"
         return 1
     fi
     # ("restart" is the one case where it is expected to be running already.)
@@ -116,7 +120,7 @@ start() {
     local iface
     share_check
     if (( ! SHARE_OK )); then
-        notify -u critical "Can't start the hotspot" "$SHARE_REASON"
+        notify -t 15000 "Can't start the hotspot" "$SHARE_REASON"
         refresh_waybar
         return 1
     fi
@@ -143,7 +147,7 @@ start() {
     if is_on; then
         notify "On: $HOTSPOT_NAME" "Password: $HOTSPOT_PASSWORD"
     else
-        notify -u critical "Hotspot failed to start" "See $LOG_FILE"
+        notify "Hotspot failed to start" "See $LOG_FILE"
     fi
     refresh_waybar
 }

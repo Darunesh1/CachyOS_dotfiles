@@ -1,0 +1,7 @@
+{
+  "$schema": "/etc/xdg/swaync/configSchema.json",
+
+  "timeout": 5,
+  "timeout-low": 3,
+  "timeout-critical": 20
+}

@@ -213,6 +213,16 @@ name the first one already holds, and leaves a permanently failed unit. Stage 8
 of `install.sh` masks it; `./install.sh --check` warns if it ever comes back
 unmasked.
 
+**Notification timeouts live in `swaync/config.json`** (symlinked to
+`~/.config/swaync`). Stock swaync ships `timeout-critical: 0`, which means a
+critical notification never disappears on its own -- so anything sent with
+`notify-send -u critical` sat on screen until clicked. This repo sets 5 s for
+normal, 3 s for low and 20 s for critical, and reserves `-u critical` for the
+one real emergency, the battery-below-5% warning. An expired notification is
+not lost: it stays in the control center (the bell in Waybar). Everything else
+falls back to `/etc/xdg/swaync/`, styling included. Reload with
+`swaync-client -R`.
+
 **The power menu is Rofi** (`scripts/power/power-menu.sh`), not wlogout. Logout
 runs `hyprctl dispatch exit` rather than `loginctl terminate-user`, which polkit
 rates `auth_admin_keep` and would demand a password just to log out. Shutdown,

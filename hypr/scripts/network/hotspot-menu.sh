@@ -17,7 +17,11 @@ HOTSPOT="$DIR/hotspot.sh"
 HOTSPOT_CONF="${XDG_CONFIG_HOME:-$HOME/.config}/hotspot.conf"
 THEME="$HOME/.config/rofi/themes/powermenu.rasi"
 
-notify() { notify-send "Hotspot" "$@"; }
+# "Hotspot" as the app name, not as the summary: with it as the summary,
+# notify() <title> <body> passed notify-send three positional arguments and it
+# refused the whole thing with "Invalid number of options" -- so the on/off and
+# password notifications never appeared.
+notify() { notify-send -a "Hotspot" "$@"; }
 
 # First run creates the file with defaults (random password); then read it.
 [[ -f "$HOTSPOT_CONF" ]] || "$HOTSPOT" init
@@ -82,7 +86,7 @@ case "$choice" in
             -filter "$HOTSPOT_NAME")
         [[ -z "$new" || "$new" == "$HOTSPOT_NAME" ]] && exit 0
         if (( ${#new} > 32 )); then
-            notify -u critical "Name not changed" "A Wi-Fi name can be at most 32 characters; that was ${#new}."
+            notify "Name not changed" "A Wi-Fi name can be at most 32 characters; that was ${#new}."
             exit 1
         fi
         HOTSPOT_NAME=$new
@@ -96,11 +100,11 @@ case "$choice" in
             -password)
         [[ -z "$new" ]] && exit 0
         if (( ${#new} < 8 || ${#new} > 63 )); then
-            notify -u critical "Password not changed" "WPA2 needs 8-63 characters; that was ${#new}."
+            notify "Password not changed" "WPA2 needs 8-63 characters; that was ${#new}."
             exit 1
         fi
         if [[ "$new" =~ [^[:print:]] ]]; then
-            notify -u critical "Password not changed" "Use printable characters only."
+            notify "Password not changed" "Use printable characters only."
             exit 1
         fi
         HOTSPOT_PASSWORD=$new

@@ -140,7 +140,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Config directories linked from the repo into the user's XDG config directory.
-LINK_DIRS=(hypr waybar kitty rofi wallust zsh)
+LINK_DIRS=(hypr waybar kitty rofi wallust swaync zsh)
 CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 
 # ═══════════════════════════════════════════════════════════════════════════
