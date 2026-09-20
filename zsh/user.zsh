@@ -17,6 +17,11 @@ fi
 
 alias gwine="gamemoderun wine"
 
+# GitHub CLI. Its own name, `gh`, is taken by the alias gist's `git push`, so it
+# answers to `gcli` here. `command` is required: without it zsh would expand the
+# body's first word through that same alias and `gcli` would push.
+alias gcli='command gh'
+
 # Configuration Overrides
 # ZSH_NO_PLUGINS=1      # Set to 1 to disable plugin loading
 # ZSH_PROMPT=           # Unset to disable prompt customization
