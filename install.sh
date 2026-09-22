@@ -123,7 +123,7 @@ Stages (each is prompted and skippable):
    6. Paths             rewrite the two files that hardcode a username
    7. Theme             pick a wallpaper and run wallust
    8. Services          gcr-ssh-agent, swaync mask, scx_lavd, GPU monitor, NM check interval,
-                        login screen scale
+                        login screen scale, Caps/Num Lock popups
    9. Extras            ocr-snipper (ALT+X), the nvim config, Lutris game-performance prefix
   10. Check             audit what is actually in place, then summarise
 USAGE
@@ -858,6 +858,29 @@ stage_services() {
     setup_gpu_monitor
     setup_nm_connectivity
     setup_greeter
+    setup_swayosd_backend
+    return 0
+}
+
+# Caps Lock / Num Lock popups. swayosd-server (autostart.lua) only draws the
+# popup; the keys themselves are read from /dev/input by this system service,
+# which a user session has no permission to do. Volume and brightness work
+# without it because those are Hyprland binds calling swayosd-client.
+setup_swayosd_backend() {
+    command -v swayosd-libinput-backend >/dev/null || return 0
+
+    if systemctl is-enabled --quiet swayosd-libinput-backend.service 2>/dev/null; then
+        ok "swayosd-libinput-backend.service enabled"
+        return 0
+    fi
+
+    info "Caps Lock and Num Lock show no popup: the key-watching half of SwayOSD"
+    info "is a system service and is not enabled."
+    ask "Enable swayosd-libinput-backend.service?" y || { skip_stage "swayosd-backend"; return 0; }
+
+    run sudo systemctl enable --now swayosd-libinput-backend.service \
+        && ok "swayosd-libinput-backend.service enabled" \
+        || warn "Could not enable swayosd-libinput-backend.service."
     return 0
 }
 
@@ -1355,6 +1378,12 @@ BINARIES
             || row WARN "swaync.service" "not masked; D-Bus will start a duplicate that fails"
     else
         row SKIPPED "systemd units" "systemctl not available"
+    fi
+    # A system unit, not a user one: it reads /dev/input, which the session cannot.
+    if command -v swayosd-libinput-backend >/dev/null; then
+        systemctl is-active --quiet swayosd-libinput-backend.service \
+            && row OK "swayosd-libinput-backend" "active (Caps/Num Lock popups)" \
+            || row WARN "swayosd-libinput-backend" "inactive; Caps/Num Lock show no popup"
     fi
     if [[ -x /usr/bin/noctalia-greeter-session ]]; then
         local gscale

@@ -231,6 +231,16 @@ matching Hyprland. Stage 8 of `install.sh` copies it to
 cannot read `$HOME`), backing up any existing file. `./install.sh --check`
 reads the scale the greeter actually used from this boot's journal.
 
+**Caps Lock and Num Lock popups need a system service.** SwayOSD comes in two
+halves: `swayosd-server` (started from `autostart.lua`) only draws the popup,
+and `swayosd-libinput-backend.service` is what tells it a lock key was pressed.
+The volume and brightness popups work without the backend because those keys are
+Hyprland binds calling `swayosd-client` directly; Caps and Num Lock are handled
+by the keyboard itself, so the only way to notice them is to read `/dev/input`,
+which a user session may not do -- hence a **system** unit, enabled by stage 8 of
+`install.sh` (`sudo systemctl enable --now swayosd-libinput-backend.service`).
+`./install.sh --check` warns when it is inactive.
+
 **The power menu is Rofi** (`scripts/power/power-menu.sh`), not wlogout. Logout
 runs `hyprctl dispatch exit` rather than `loginctl terminate-user`, which polkit
 rates `auth_admin_keep` and would demand a password just to log out. Shutdown,
