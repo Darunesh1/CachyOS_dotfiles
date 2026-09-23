@@ -17,9 +17,10 @@
 #
 # The MT7921 can run the AP and the Wi-Fi connection only on ONE channel
 # ("#channels <= 1" in `iw list`), so the AP must use the channel the laptop is
-# connected on -- and it may not start an AP on a DFS (radar) channel. So on a
-# 5 GHz DFS network (channels 52-144) this refuses with a clear message. The
-# router's 2.4 GHz network works, and so does 5 GHz on channels 36-48/149-165.
+# connected on -- create_ap picks that up by itself -- and it may not start an
+# AP on a DFS (radar) channel. So on a 5 GHz DFS network (channels 52-144) this
+# refuses with a clear message. The router's 2.4 GHz network works, and so does
+# 5 GHz on channels 36-48/149-165.
 #
 # Name and password live in HOTSPOT_CONF (~/.config/hotspot.conf), never in the
 # repo; edit them from hotspot-menu.sh (SUPER + CTRL + H). They reach create_ap
@@ -28,7 +29,10 @@
 
 HOTSPOT_CONF="${XDG_CONFIG_HOME:-$HOME/.config}/hotspot.conf"
 RUN_CONF="${XDG_RUNTIME_DIR:-/tmp}/hotspot-create_ap.conf"
-LOG_FILE="/tmp/hotspot-create_ap.log"
+# In $XDG_RUNTIME_DIR, and created by us before pkexec, so it belongs to the
+# user: root only appends to it. As /tmp/hotspot-create_ap.log it was root-owned
+# 0600, so "Hotspot failed to start -- see <log>" pointed at an unreadable file.
+LOG_FILE="${XDG_RUNTIME_DIR:-/tmp}/hotspot-create_ap.log"
 SELF="$(readlink -f "$0")"
 
 # "Hotspot" as the app name, not as the summary: with it as the summary,
@@ -131,12 +135,17 @@ start() {
       printf 'WIFI_IFACE=%q\nINTERNET_IFACE=%q\nSSID=%q\nPASSPHRASE=%q\nDAEMONIZE=1\nDAEMON_LOGFILE=%q\n' \
           "$iface" "$iface" "$HOTSPOT_NAME" "$HOTSPOT_PASSWORD" "$LOG_FILE" > "$RUN_CONF" )
 
+    : > "$LOG_FILE"; chmod 600 "$LOG_FILE"
+
     pkexec "$SELF" --as-root "${1:-start}" "$RUN_CONF" "$iface"
     local rc=$?
-    # create_ap reads its config before it daemonizes, so the copy holding
-    # the password is not needed any more.
-    rm -f "$RUN_CONF"
-    (( rc == 0 )) || { notify "Cancelled"; return 1; }
+    # $RUN_CONF is deliberately NOT removed here. create_ap does not stay in the
+    # process pkexec started: with DAEMONIZE=1 it re-executes itself with the
+    # same --config argument and parses the file a SECOND time (create_ap:1524,
+    # ARGS at :1209). Deleting it as soon as pkexec returned killed every start
+    # a fraction of a second in, with "ERROR: No config file found at given
+    # location" in a log nobody could read. It goes after the wait loop below.
+    (( rc == 0 )) || { rm -f "$RUN_CONF"; notify "Cancelled"; return 1; }
 
     # create_ap daemonizes at once; hostapd can still fail a moment later.
     local i
@@ -144,10 +153,15 @@ start() {
         is_on && break
         sleep 1
     done
+    # The daemon has read it by now (or died trying).
+    rm -f "$RUN_CONF"
+
     if is_on; then
         notify "On: $HOTSPOT_NAME" "Password: $HOTSPOT_PASSWORD"
     else
-        notify "Hotspot failed to start" "See $LOG_FILE"
+        local why
+        why=$(grep -v '^[[:space:]]*$' "$LOG_FILE" 2>/dev/null | tail -1)
+        notify -t 15000 "Hotspot failed to start" "${why:-No output from create_ap.}"$'\n'"$LOG_FILE"
     fi
     refresh_waybar
 }
