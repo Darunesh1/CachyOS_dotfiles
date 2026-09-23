@@ -109,12 +109,30 @@ case "$choice" in
         fi
         HOTSPOT_PASSWORD=$new
         save
-        # Typing was hidden, so show what was saved -- a typo is caught now,
-        # not when the phone refuses to connect.
-        notify "Password changed" "New password: $HOTSPOT_PASSWORD"
+        notify "Password changed" "Use \"Show password\" to see it."
         ;;
 
     "$show_row")
-        notify "Name: $HOTSPOT_NAME" "Password: $HOTSPOT_PASSWORD"
+        # A dialog rather than a notification: a notification cannot be selected
+        # from, so the password could only be read and retyped. Here Enter copies
+        # the highlighted value. Nothing prints the value itself -- not the rofi
+        # prompt afterwards, not the confirmation.
+        name_line="  Name       $HOTSPOT_NAME"
+        pass_line="  Password   $HOTSPOT_PASSWORD"
+        picked=$(printf '%s\n' "$name_line" "$pass_line" \
+            | rofi -dmenu -i -no-custom -p "󰀂  Hotspot" \
+                -mesg "Enter copies to the clipboard   ·   Esc closes" \
+                -theme "$THEME" \
+                -theme-str 'window { width: 620px; }
+                            mainbox { children: [ inputbar, message, listview ]; }
+                            message { padding: 8px 14px; }
+                            entry { placeholder: ""; }
+                            textbox { text-color: @fg1; }')
+        # Compared against the whole row, not split on whitespace: a password
+        # may contain spaces, and cutting fields would truncate it.
+        case "$picked" in
+            "$name_line") printf '%s' "$HOTSPOT_NAME"     | wl-copy && notify "Name copied" "$HOTSPOT_NAME" ;;
+            "$pass_line") printf '%s' "$HOTSPOT_PASSWORD" | wl-copy && notify "Password copied" "Paste it with CTRL+V." ;;
+        esac
         ;;
 esac

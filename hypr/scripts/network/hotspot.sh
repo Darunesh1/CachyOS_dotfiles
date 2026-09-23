@@ -25,7 +25,8 @@
 # Name and password live in HOTSPOT_CONF (~/.config/hotspot.conf), never in the
 # repo; edit them from hotspot-menu.sh (SUPER + CTRL + H). They reach create_ap
 # through a 0600 config file, not the command line, where every process on the
-# machine could read the password.
+# machine could read the password -- and no notification here ever prints it:
+# the menu's "Show password" copies it instead.
 
 HOTSPOT_CONF="${XDG_CONFIG_HOME:-$HOME/.config}/hotspot.conf"
 RUN_CONF="${XDG_RUNTIME_DIR:-/tmp}/hotspot-create_ap.conf"
@@ -157,7 +158,10 @@ start() {
     rm -f "$RUN_CONF"
 
     if is_on; then
-        notify "On: $HOTSPOT_NAME" "Password: $HOTSPOT_PASSWORD"
+        # The name, never the password: this pops up every time the hotspot
+        # starts and then sits in the control center. "Show password" in the
+        # menu (SUPER + CTRL + H) is where the password is read and copied.
+        notify "Hotspot on" "$HOTSPOT_NAME"
     else
         local why
         why=$(grep -v '^[[:space:]]*$' "$LOG_FILE" 2>/dev/null | tail -1)
@@ -169,7 +173,8 @@ start() {
 stop() {
     is_on || { refresh_waybar; return 0; }
     pkexec "$SELF" --as-root stop "" "$(wifi_iface)" || { notify "Cancelled"; return 1; }
-    notify "Off"
+    load_settings   # for the name -- "Off" on its own said nothing about what stopped
+    notify "Hotspot off" "$HOTSPOT_NAME"
     refresh_waybar
 }
 
