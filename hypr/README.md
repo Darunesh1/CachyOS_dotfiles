@@ -137,6 +137,12 @@ Access via `SUPER + SHIFT + G`:
 - **Power Saving** — disables animations, blur and shadows, enables VFR
 - **Balanced** — normal desktop experience
 - **Performance** — max performance for apps
+
+Each of the three confirms itself with a notification carrying its own icon.
+`hypr-profile.sh` only ever echoed to stdout, and it runs from rofi and from the
+waybar module -- neither has a terminal -- so switching used to give no sign at
+all. If `powerprofilesctl` refuses the system profile, the notification says so
+rather than claiming a switch that only half happened.
 - **Game Mode** — toggles on/off (the waybar icon shows 🎮 while active):
   - `performance` profile. CachyOS's power-profiles-daemon then switches the
     sched-ext scheduler (`scx_lavd`, run from boot by `scx_loader`, installer

@@ -49,6 +49,7 @@ ignore the theme). `-a` sets the app name, which is what swaync groups by.
 | Hotspot | `network-wireless-hotspot-symbolic` |
 | Battery | `battery-caution-symbolic` (critical), `battery-low-symbolic` |
 | Game Mode | `applications-games-symbolic` |
+| Power profile | `power-profile-power-saver-symbolic`, `-balanced-`, `-performance-` |
 | Screen recording | `media-record-symbolic` |
 | Clipboard | `edit-paste-symbolic` |
 | File finder | `system-search-symbolic` |
