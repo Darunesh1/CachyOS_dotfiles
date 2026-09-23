@@ -16,7 +16,7 @@ THEME="$HOME/.config/rofi/themes/windows.rasi"
 
 json=$(hyprctl clients -j 2>/dev/null)
 if [[ -z "$json" ]]; then
-    notify-send -u critical "Window switcher" "Could not talk to Hyprland"
+    notify-send -u critical -a "Window switcher" -i focus-windows-symbolic "Window switcher" "Could not talk to Hyprland"
     exit 1
 fi
 
@@ -43,7 +43,7 @@ mapfile -t rows < <(
 )
 
 if [[ ${#rows[@]} -eq 0 ]]; then
-    notify-send "Window switcher" "No open windows"
+    notify-send -a "Window switcher" -i focus-windows-symbolic "Window switcher" "No open windows"
     exit 0
 fi
 

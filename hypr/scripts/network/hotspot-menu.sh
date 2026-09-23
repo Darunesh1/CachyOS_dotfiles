@@ -21,7 +21,7 @@ THEME="$HOME/.config/rofi/themes/powermenu.rasi"
 # notify() <title> <body> passed notify-send three positional arguments and it
 # refused the whole thing with "Invalid number of options" -- so the on/off and
 # password notifications never appeared.
-notify() { notify-send -a "Hotspot" "$@"; }
+notify() { notify-send -a "Hotspot" -i network-wireless-hotspot-symbolic "$@"; }
 
 # First run creates the file with defaults (random password); then read it.
 [[ -f "$HOTSPOT_CONF" ]] || "$HOTSPOT" init

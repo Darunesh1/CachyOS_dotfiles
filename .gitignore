@@ -9,6 +9,7 @@ hypr/hyprlock-colors.conf
 hypr/config/wallust.lua
 kitty/kitty-theme.conf
 swayosd/style.css
+swaync/style.css
 waybar/style/wallust.css
 zsh/wallust-colors.zsh
 rofi/themes/colours.rasi

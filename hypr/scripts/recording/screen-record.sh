@@ -39,7 +39,7 @@ while [[ $# -gt 0 ]]; do
         --res)       RES="${2:-}";   shift ;;
         --audio)     AUDIO="${2:-}"; shift ;;
         *)
-            notify-send -u critical "Screen Recording" "Unknown option: $1"
+            notify-send -u critical -a "Screen Recording" -i media-record-symbolic "Screen Recording" "Unknown option: $1"
             exit 1
             ;;
     esac
@@ -59,7 +59,7 @@ if [[ -f "$PID_FILE" ]]; then
     if kill -0 "$PID" 2>/dev/null; then
         # wf-recorder finalises the file on SIGINT, same as Ctrl+C.
         kill -INT "$PID"
-        notify-send "Screen Recording" "Recording stopped and saved"
+        notify-send -a "Screen Recording" -i media-record-symbolic "Screen Recording" "Recording stopped and saved"
         exit 0
     fi
 
@@ -106,7 +106,7 @@ case "$PROFILE" in
         LABEL="HQ recording"
         ;;
     *)
-        notify-send -u critical "Screen Recording" "Unknown profile: $PROFILE"
+        notify-send -u critical -a "Screen Recording" -i media-record-symbolic "Screen Recording" "Unknown profile: $PROFILE"
         exit 1
         ;;
 esac
@@ -123,12 +123,12 @@ case "$AUDIO" in
     system)
         SINK=$(pactl get-default-sink 2>/dev/null)
         if [[ -z "$SINK" ]]; then
-            notify-send -u critical "Screen Recording" "No default audio output found"
+            notify-send -u critical -a "Screen Recording" -i media-record-symbolic "Screen Recording" "No default audio output found"
             exit 1
         fi
         AUDIO_ARGS=(--audio="$SINK.monitor" "${AUDIO_CODEC[@]}") ;;
     *)
-        notify-send -u critical "Screen Recording" "Unknown audio mode: $AUDIO"
+        notify-send -u critical -a "Screen Recording" -i media-record-symbolic "Screen Recording" "Unknown audio mode: $AUDIO"
         exit 1 ;;
 esac
 
@@ -140,7 +140,7 @@ case "$RES" in
     native)        SCALE_ARGS=() ;;
     1440|1080|720) SCALE_ARGS=(-F "scale=-2:min($RES\\,ih)") ;;
     *)
-        notify-send -u critical "Screen Recording" "Unknown resolution: $RES"
+        notify-send -u critical -a "Screen Recording" -i media-record-symbolic "Screen Recording" "Unknown resolution: $RES"
         exit 1 ;;
 esac
 
@@ -150,7 +150,7 @@ case "$AREA" in
         # slurp prints "x,y WxH", exactly the format wf-recorder -g expects.
         GEOMETRY=$(slurp)
         if [[ -z "$GEOMETRY" ]]; then
-            notify-send "Screen Recording" "Recording cancelled"
+            notify-send -a "Screen Recording" -i media-record-symbolic "Screen Recording" "Recording cancelled"
             exit 1
         fi
         TARGET_ARGS=(-g "$GEOMETRY")
@@ -158,13 +158,13 @@ case "$AREA" in
     full)
         OUTPUT=$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused) | .name')
         if [[ -z "$OUTPUT" ]]; then
-            notify-send -u critical "Screen Recording" "Could not find the focused monitor"
+            notify-send -u critical -a "Screen Recording" -i media-record-symbolic "Screen Recording" "Could not find the focused monitor"
             exit 1
         fi
         TARGET_ARGS=(-o "$OUTPUT")
         ;;
     *)
-        notify-send -u critical "Screen Recording" "Unknown area: $AREA"
+        notify-send -u critical -a "Screen Recording" -i media-record-symbolic "Screen Recording" "Unknown area: $AREA"
         exit 1 ;;
 esac
 
@@ -184,11 +184,11 @@ echo "$REC_PID" > "$PID_FILE"
 sleep 1
 if ! kill -0 "$REC_PID" 2>/dev/null; then
     rm -f "$PID_FILE"
-    notify-send -u critical "Screen Recording" "Failed to start — see $LOG_FILE"
+    notify-send -u critical -a "Screen Recording" -i media-record-symbolic "Screen Recording" "Failed to start — see $LOG_FILE"
     exit 1
 fi
 
-notify-send "Screen Recording" "$LABEL started ($AREA, $RES, audio: $AUDIO)"
+notify-send -a "Screen Recording" -i media-record-symbolic "Screen Recording" "$LABEL started ($AREA, $RES, audio: $AUDIO)"
 
 # Wait until recording stops
 wait "$REC_PID"
@@ -196,4 +196,4 @@ wait "$REC_PID"
 # Cleanup
 rm -f "$PID_FILE"
 
-notify-send "Screen Recording" "Saved to $FILENAME"
+notify-send -a "Screen Recording" -i media-record-symbolic "Screen Recording" "Saved to $FILENAME"

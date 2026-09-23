@@ -13,7 +13,7 @@
 STATE_FILE="/tmp/hypridle-paused"
 
 notify() {
-    command -v notify-send >/dev/null 2>&1 && notify-send "Coffee Mode" "$1"
+    command -v notify-send >/dev/null 2>&1 && notify-send -a "Coffee Mode" -i preferences-desktop-screensaver-symbolic "Coffee Mode" "$1"
 }
 
 if [[ -f "$STATE_FILE" ]]; then

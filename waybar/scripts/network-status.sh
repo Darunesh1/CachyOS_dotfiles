@@ -207,9 +207,9 @@ emit() {
     if [[ "$state" != "$prev_state" ]]; then
         printf '%s\n' "$state" > "$LAST_FILE"
         case "$state" in
-            limited) notify-send "Wi-Fi" "Connected, but no internet" ;;
-            portal)  notify-send "Wi-Fi" "Login required -- click the Wi-Fi icon" ;;
-            full)    [[ "$prev_state" == limited || "$prev_state" == portal ]] && notify-send "Wi-Fi" "Internet is back" ;;
+            limited) notify-send -a "Wi-Fi" -i network-wireless-offline-symbolic "Wi-Fi" "Connected, but no internet" ;;
+            portal)  notify-send -a "Wi-Fi" -i network-wireless-offline-symbolic "Wi-Fi" "Login required -- click the Wi-Fi icon" ;;
+            full)    [[ "$prev_state" == limited || "$prev_state" == portal ]] && notify-send -a "Wi-Fi" -i network-wireless-signal-excellent-symbolic "Wi-Fi" "Internet is back" ;;
         esac
         prev_state=$state
     fi

@@ -220,8 +220,15 @@ critical notification never disappears on its own -- so anything sent with
 normal, 3 s for low and 20 s for critical, and reserves `-u critical` for the
 one real emergency, the battery-below-5% warning. An expired notification is
 not lost: it stays in the control center (the bell in Waybar). Everything else
-falls back to `/etc/xdg/swaync/`, styling included. Reload with
-`swaync-client -R`.
+falls back to `/etc/xdg/swaync/`. Reload with `swaync-client -R`.
+
+The **look** is generated: `wallust/templates/swaync.css` becomes
+`~/.config/swaync/style.css`, so a notification is a card in the wallpaper's
+colours with a coloured left edge -- accent normally, a fixed red for critical.
+Every `notify-send` in the repo also passes `-i` with a symbolic icon, so Wi-Fi,
+hotspot, battery, recording and the rest are told apart at a glance and the icon
+picks up the accent colour. `set-wallpaper.sh` reloads it with
+`swaync-client -rs`. The icon table is in `swaync/README.md`.
 
 **The login screen is greetd + noctalia-greeter** (the CachyOS default). It
 guesses 1.5x scale on this panel, so everything on it looked huge; the

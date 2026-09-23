@@ -39,7 +39,7 @@ SELF="$(readlink -f "$0")"
 # notify() <title> <body> passed notify-send three positional arguments and it
 # refused the whole thing with "Invalid number of options" -- so the on/off and
 # password notifications never appeared.
-notify() { notify-send -a "Hotspot" "$@"; }
+notify() { notify-send -a "Hotspot" -i network-wireless-hotspot-symbolic "$@"; }
 refresh_waybar() { pkill -RTMIN+10 waybar 2>/dev/null; }
 
 # ── Privileged part: run through pkexec, one password prompt per action ─────

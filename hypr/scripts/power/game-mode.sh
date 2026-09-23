@@ -38,7 +38,7 @@ CYCLE_PATTERN='^(/usr)?/bin/bash [^ ]*/wallpaper/awww-cycle\.sh$'
 NETWORK_PATTERN='^([^ ]*/)?bash [^ ]*/waybar/scripts/network-status\.sh$'
 
 have() { command -v "$1" >/dev/null 2>&1; }
-notify() { have notify-send && notify-send "Game Mode" "$1"; }
+notify() { have notify-send && notify-send -a "Game Mode" -i applications-games-symbolic "Game Mode" "$1"; }
 save() { printf '%s\n' "$2" > "$STATE_DIR/$1"; }
 saved() { cat "$STATE_DIR/$1" 2>/dev/null; }
 is_on() { [[ -f "$STATE_DIR/active" ]]; }

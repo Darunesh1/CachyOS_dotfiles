@@ -31,7 +31,7 @@ for f in "$DIR"/presets/*.sh; do
 done
 
 if [[ ${#presets[@]} -eq 0 ]]; then
-    notify-send -u critical "Screen Recording" "No presets in $DIR/presets"
+    notify-send -u critical -a "Screen Recording" -i media-record-symbolic "Screen Recording" "No presets in $DIR/presets"
     exit 1
 fi
 

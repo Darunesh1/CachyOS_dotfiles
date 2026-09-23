@@ -14,7 +14,7 @@
 THEME="$HOME/.config/rofi/themes/finder.rasi"
 
 if ! command -v fd >/dev/null 2>&1; then
-    notify-send -u critical "File finder" "fd is not installed. Run: sudo pacman -S fd"
+    notify-send -u critical -a "File finder" -i system-search-symbolic "File finder" "fd is not installed. Run: sudo pacman -S fd"
     exit 1
 fi
 
@@ -27,7 +27,7 @@ mapfile -t files < <(
 )
 
 if [[ ${#files[@]} -eq 0 ]]; then
-    notify-send "File finder" "No files found"
+    notify-send -a "File finder" -i system-search-symbolic "File finder" "No files found"
     exit 0
 fi
 

@@ -6,6 +6,7 @@ check_contrast = true
 
 [templates]
 swayosd = { template = 'swayosd.css', target = '~/.config/swayosd/style.css' }
+swaync = { template = 'swaync.css', target = '~/.config/swaync/style.css' }
 hyprlock = { template = 'hyprlock.conf', target = '~/.config/hypr/hyprlock-colors.conf' }
 hypr = { template = 'hypr.lua', target = '~/.config/hypr/config/wallust.lua' }
 kitty = { template = 'kitty.conf', target = '~/.config/kitty/kitty-theme.conf' }

@@ -39,6 +39,10 @@ fi
 # style/wallust.css by itself.
 hyprctl reload >/dev/null 2>&1 || true
 
+# swaync re-reads its stylesheet on request, so unlike swayosd below it never
+# has to be restarted -- the notification colours change with the next popup.
+swaync-client -rs >/dev/null 2>&1 || true
+
 # swayosd-server reads its CSS once at startup, so it has to be restarted to
 # pick up the colours wallust just regenerated. Only do that when the file
 # actually changed -- the hash is kept in the runtime dir because this script

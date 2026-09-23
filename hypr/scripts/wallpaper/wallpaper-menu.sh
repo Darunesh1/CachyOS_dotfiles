@@ -27,7 +27,7 @@ mapfile -t images < <(
         \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) | sort
 )
 if [[ ${#images[@]} -eq 0 ]]; then
-    notify-send "Wallpaper" "No images in $WALLPAPER_DIR"
+    notify-send -a "Wallpaper" -i preferences-desktop-wallpaper-symbolic "Wallpaper" "No images in $WALLPAPER_DIR"
     exit 1
 fi
 
@@ -46,7 +46,7 @@ for i in "${!images[@]}"; do
 done
 
 if [[ ${#todo[@]} -gt 0 ]]; then
-    notify-send "Wallpaper" "Generating ${#todo[@]} thumbnail(s)…"
+    notify-send -a "Wallpaper" -i preferences-desktop-wallpaper-symbolic "Wallpaper" "Generating ${#todo[@]} thumbnail(s)…"
     # Fill-and-crop to 16:9 so every tile in the grid is the same shape.
     # "[0]" takes the first frame/layer only, and is cheap for plain images.
     printf '%s\n' "${todo[@]}" | xargs -P "$(nproc)" -d '\n' -I{} bash -c '
@@ -87,7 +87,7 @@ idx=$(build_menu | rofi -dmenu -i -no-custom -show-icons -format i \
 if [[ "$idx" -eq 0 ]]; then
     rm -f "$PAUSE_FILE"
     img="${images[RANDOM % ${#images[@]}]}"
-    notify-send "Wallpaper" "Auto-cycle resumed"
+    notify-send -a "Wallpaper" -i preferences-desktop-wallpaper-symbolic "Wallpaper" "Auto-cycle resumed"
 else
     touch "$PAUSE_FILE"
     img="${images[$((idx - 1))]}"

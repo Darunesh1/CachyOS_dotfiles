@@ -4,7 +4,7 @@ SHADER_DIR="$HOME/.config/hypr/shaders"
 STATE_FILE="$HOME/.config/hypr/config/active-shader.lua"
 
 if [[ ! -d "$SHADER_DIR" ]]; then
-    notify-send "Shader Menu" "Shader directory not found: $SHADER_DIR"
+    notify-send -a "Shaders" -i video-display-symbolic "Shader Menu" "Shader directory not found: $SHADER_DIR"
     exit 1
 fi
 
@@ -29,11 +29,11 @@ if [[ "$CHOICE" == "None" ]]; then
     # Completely empty the state file
     > "$STATE_FILE"
 
-    notify-send "Hyprland Shaders" "Shader cleared."
+    notify-send -a "Shaders" -i video-display-symbolic "Hyprland Shaders" "Shader cleared."
 
 elif [[ -n "$CHOICE" ]]; then
     # Apply instantly, and write the Lua the main config will require() on start
     apply_shader "$SHADER_DIR/$CHOICE"
 
-    notify-send "Hyprland Shaders" "Applied: $CHOICE"
+    notify-send -a "Shaders" -i video-display-symbolic "Hyprland Shaders" "Applied: $CHOICE"
 fi

@@ -21,14 +21,14 @@
 THEME="$HOME/.config/rofi/themes/clipboard.rasi"
 
 if ! command -v cliphist >/dev/null 2>&1; then
-    notify-send -u critical "Clipboard" "cliphist is not installed. Run: sudo pacman -S cliphist"
+    notify-send -u critical -a "Clipboard" -i edit-paste-symbolic "Clipboard" "cliphist is not installed. Run: sudo pacman -S cliphist"
     exit 1
 fi
 
 mapfile -t rows < <(cliphist list 2>/dev/null)
 
 if [[ ${#rows[@]} -eq 0 ]]; then
-    notify-send "󰅍  Clipboard" "History is empty"
+    notify-send -a "Clipboard" -i edit-paste-symbolic "Clipboard" "History is empty"
     exit 0
 fi
 
@@ -51,7 +51,7 @@ wipe() {
         -p "󰅍  Clipboard" -mesg "Clear all ${#rows[@]} clipboard entries?" \
         -theme "$THEME")
     if [[ "$answer" == "Yes,"* ]]; then
-        cliphist wipe && notify-send "󰅍  Clipboard" "History cleared"
+        cliphist wipe && notify-send -a "Clipboard" -i edit-paste-symbolic "Clipboard" "History cleared"
     fi
 }
 

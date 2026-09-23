@@ -715,6 +715,7 @@ WALLUST_TARGETS=(
     "$CONFIG_HOME/hypr/config/wallust.lua"
     "$CONFIG_HOME/kitty/kitty-theme.conf"
     "$CONFIG_HOME/swayosd/style.css"
+    "$CONFIG_HOME/swaync/style.css"
     "$CONFIG_HOME/waybar/style/wallust.css"
     "$CONFIG_HOME/zsh/wallust-colors.zsh"
     "$CONFIG_HOME/rofi/themes/colours.rasi"
