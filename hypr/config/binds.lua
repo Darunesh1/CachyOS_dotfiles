@@ -49,6 +49,9 @@ hl.bind(mainMod .. " + A", hl.dsp.exec_cmd(L.menu))
 hl.bind(mainMod .. " + CTRL + H", hl.dsp.exec_cmd(L.scripts .. "/network/hotspot-menu.sh"))
 -- Wallpaper picker (pauses auto-cycle; "Random" resumes it)
 hl.bind(mainMod .. " + CTRL + W", hl.dsp.exec_cmd(L.scripts .. "/wallpaper/wallpaper-menu.sh"))
+
+-- Display menu: mirror, extend or use a single screen (external monitor/TV)
+hl.bind(mainMod .. " + CTRL + D", hl.dsp.exec_cmd(L.scripts .. "/display/display-menu.sh"))
 -- ── Emoji Picker ────────────────────────────────────────────────────────────
 hl.bind(mainMod .. " + period", hl.dsp.exec_cmd("rofimoji --action type"))
 
@@ -120,9 +123,9 @@ hl.bind(mainMod .. " + Tab", hl.dsp.exec_cmd(L.scripts .. "/rofi/window-switcher
 
 
 -- ── Laptop Lid Switch ───────────────────────────────────────────────────────
--- Lock the screen and suspend when the lid is closed
-hl.bind("switch:on:Lid Switch", hl.dsp.exec_cmd("pidof hyprlock || hyprlock"), { locked = true })
-hl.bind("switch:on:Lid Switch", hl.dsp.exec_cmd("systemctl suspend"), { locked = true })
+-- Lock and suspend when the lid is closed -- unless a display is plugged in
+-- (scripts/display/lid-close.sh), in which case the picture stays on it.
+hl.bind("switch:on:Lid Switch", hl.dsp.exec_cmd(L.scripts .. "/display/lid-close.sh"), { locked = true })
 
 
 -- ── Window Navigation ───────────────────────────────────────────────────────

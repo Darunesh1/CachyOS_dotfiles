@@ -45,6 +45,10 @@ Modular Hyprland configuration written in **Lua**.
     │   ├── powerprofile-status.sh # Status output for waybar
     │   └── battery-notify.sh      # Battery notification daemon
     │
+    ├── display/
+    │   ├── display-menu.sh        # Rofi menu: mirror, extend, single screen
+    │   └── lid-close.sh           # Lid: suspend, unless a display is plugged in
+    │
     ├── network/
     │   ├── hotspot.sh             # Wi-Fi hotspot on/off via create_ap (keeps Wi-Fi up)
     │   └── hotspot-menu.sh        # Rofi menu: toggle, edit name and password
@@ -96,6 +100,7 @@ emergency binds: **SUPER+Q** (terminal), **SUPER+R** (run), **SUPER+M** (exit).
 | `SUPER + A` | Open app launcher (rofi) |
 | `SUPER + CTRL + H` | Hotspot menu: on/off, edit name and password. The password is never shown in a notification -- "Show password" opens a dialog and Enter copies the highlighted value. Shares your Wi-Fi while staying connected; works on 2.4 GHz or 5 GHz ch 36-48 / 149-165, not on radar (DFS) ch 52-144. The waybar 󰀂 icon shows whether it can share right now |
 | `SUPER + CTRL + W` | Wallpaper picker (rofi thumbnail grid; pauses auto-cycle, "Random" resumes it) |
+| `SUPER + CTRL + D` | Display menu: mirror, extend left/right, or one screen only. Plugging a monitor or TV in mirrors the laptop screen by default |
 | `SUPER + .` | Emoji picker |
 | `SUPER + V` | Clipboard history (rofi; `CTRL + SHIFT + DEL` clears it) |
 | `ALT + X` | OCR snipper (region → text to clipboard) |
@@ -128,7 +133,29 @@ emergency binds: **SUPER+Q** (terminal), **SUPER+R** (run), **SUPER+M** (exit).
 | `SUPER + SHIFT + R` | Reload Hyprland |
 
 Media and brightness keys are handled via SwayOSD, and work while the screen is locked.
-Closing the laptop lid locks and suspends.
+Closing the laptop lid locks and suspends -- unless an external display is
+plugged in, in which case nothing happens and the picture stays on it.
+
+### External displays
+
+Plug in HDMI (or DisplayPort over USB-C) and it **mirrors** the laptop screen.
+That is the catch-all rule at the bottom of `config/monitors.lua`: an empty
+`output` matches any monitor without a rule of its own, so it covers whichever
+connector is used. Hyprland's own default would have put the display to the
+right as a second desktop instead.
+
+`SUPER + CTRL + D` (`scripts/display/display-menu.sh`) changes it: mirror,
+extend to the left or right, laptop screen only, or external screen only. The
+choice lasts until the cable is pulled -- replugging matches the catch-all rule
+again and mirrors. Rules are applied with `hyprctl eval`, since `hyprctl
+keyword` refuses to work under the Lua config manager, and every call is checked
+for an error rather than failing silently.
+
+Closing the lid with a display plugged in does **nothing at all** -- not even
+lock (`scripts/display/lid-close.sh`). The mirror's source is `eDP-1`, so
+locking or powering the laptop panel down would blank the external screen too,
+which is exactly when the lid tends to be shut. The panel stays lit inside the
+closed lid; that is the trade. Unplug and the usual lock-and-suspend is back.
 
 ### Power Profiles
 
