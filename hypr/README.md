@@ -180,6 +180,9 @@ rather than claiming a switch that only half happened.
     run or `hyprctl reload` hits mid-game
   - the waybar Wi-Fi module paused (zero CPU): it keeps its last icon, and
     "no internet" changes show once Game Mode is turned off
+  - Thunar thumbnails off and `tumblerd` killed, so opening a folder of
+    screenshots mid-game decodes nothing; the previous setting is restored
+    afterwards
   - turning it off restores exactly what was there before, including the
     previous profile. Picking another profile while it's on ends it first.
 

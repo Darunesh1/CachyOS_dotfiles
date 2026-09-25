@@ -22,7 +22,9 @@
 #   * the wallpaper cycle frozen (SIGSTOP), so no wallust run + hyprctl reload
 #     lands in the middle of a game every 200 s
 #   * the waybar network module frozen too: zero CPU while gaming. The bar
-#     keeps its last icon; internet re-checks resume when Game Mode ends.
+#     keeps its last icon; internet re-checks resume when Game Mode ends
+#   * Thunar thumbnails off and tumblerd killed, so opening a folder of
+#     screenshots mid-game decodes nothing
 #
 # Everything that is changed is saved first and restored exactly on "off" --
 # including whichever power profile was active before, not always balanced.
@@ -77,6 +79,19 @@ enable() {
     pkill -STOP -f "$CYCLE_PATTERN"
     pkill -STOP -f "$NETWORK_PATTERN"
 
+    # ── Thumbnails ──────────────────────────────────────────────────────────
+    # Opening a folder of screenshots mid-game otherwise hands tumbler a pile of
+    # images to decode. Whatever the mode was is saved, so a setup that had
+    # thumbnails off already is not silently turned on at the end.
+    if have xfconf-query; then
+        save thumbs "$(xfconf-query -c thunar -p /misc-thumbnail-mode 2>/dev/null)"
+        xfconf-query -c thunar -p /misc-thumbnail-mode -n -t string \
+            -s THUNAR_THUMBNAIL_MODE_NEVER >/dev/null 2>&1
+    fi
+    # D-Bus activated, so with thumbnailing off nothing brings it back until
+    # Game Mode ends.
+    pkill -x tumblerd
+
     touch "$STATE_DIR/active"
 
     local sched=""
@@ -96,6 +111,12 @@ disable() {
 
     if have swaync-client && [[ "$(saved dnd)" == "false" ]]; then
         swaync-client -df >/dev/null
+    fi
+
+    local thumbs
+    thumbs="$(saved thumbs)"
+    if have xfconf-query && [[ -n "$thumbs" ]]; then
+        xfconf-query -c thunar -p /misc-thumbnail-mode -n -t string -s "$thumbs" >/dev/null 2>&1
     fi
 
     # hypr-profile.sh sets both the profile and the matching desktop effects,

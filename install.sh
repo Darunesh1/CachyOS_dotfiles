@@ -875,6 +875,37 @@ stage_services() {
     setup_greeter
     setup_swayosd_backend
     setup_archiver
+    setup_thunar_view
+    return 0
+}
+
+# Thumbnails and the image preview pane. These are xfconf keys -- per-user
+# state, like the archive handler above, so they are set here rather than being
+# tracked as a config file. The thumbnails themselves need `tumbler`; these keys
+# only decide whether Thunar asks for them.
+setup_thunar_view() {
+    command -v xfconf-query >/dev/null || return 0
+
+    local preview
+    preview=$(xfconf-query -c thunar -p /misc-image-preview-mode 2>/dev/null)
+    if [[ "$preview" == THUNAR_IMAGE_PREVIEW_MODE_EMBEDDED ]]; then
+        ok "Thunar image preview enabled"
+        return 0
+    fi
+
+    info "Thunar can show the selected image in a side pane and draw thumbnails"
+    info "instead of generic icons."
+    ask "Turn on the image preview pane and thumbnails?" y || { skip_stage "thunar-view"; return 0; }
+
+    # ONLY_LOCAL rather than ALWAYS: it covers the internal disk and the USB
+    # drive under /run/media, without a future network mount pulling files over
+    # the wire just to draw icons.
+    run xfconf-query -c thunar -p /misc-image-preview-mode -n -t string -s THUNAR_IMAGE_PREVIEW_MODE_EMBEDDED
+    run xfconf-query -c thunar -p /last-image-preview-visible -n -t bool -s true
+    run xfconf-query -c thunar -p /misc-thumbnail-mode -n -t string -s THUNAR_THUMBNAIL_MODE_ONLY_LOCAL
+    ok "Thunar image preview + thumbnails on"
+    command -v tumblerd >/dev/null || command -v /usr/lib/tumbler-1/tumblerd >/dev/null \
+        || warn "tumbler is not installed, so no thumbnail will ever be generated."
     return 0
 }
 
@@ -1335,6 +1366,18 @@ BINARIES
             row MISSING "~/.config/$d" "absent"
         fi
     done
+    # tumblerd is not on $PATH -- it is D-Bus activated from /usr/lib/tumbler-1.
+    if [[ -x /usr/lib/tumbler-1/tumblerd ]]; then
+        row OK "tumbler" "thumbnail service installed"
+    else
+        row MISSING "tumbler" "no thumbnails will ever be generated in Thunar"
+    fi
+    if [[ -f "$HOME/.local/share/icons/wallust-papirus/index.theme" ]]; then
+        row OK "folder icon theme" "wallust-papirus -> $(readlink "$HOME/.local/share/icons/wallust-papirus/64x64/places/folder.svg" 2>/dev/null | sed -E 's|.*/folder-([a-z]+)\.svg|\1|')"
+    else
+        row MISSING "folder icon theme" "run scripts/theme/folder-colors.sh (or change the wallpaper)"
+    fi
+
     # Linked on its own, not with its directory -- see stage 4.
     if is_correct_link "$CONFIG_HOME/Thunar/uca.xml" "$REPO/thunar/uca.xml"; then
         row OK "~/.config/Thunar/uca.xml" "-> repo"

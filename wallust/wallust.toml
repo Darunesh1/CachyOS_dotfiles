@@ -13,3 +13,4 @@ kitty = { template = 'kitty.conf', target = '~/.config/kitty/kitty-theme.conf' }
 waybar = { template = 'waybar.css', target = '~/.config/waybar/style/wallust.css' }
 zsh = { template = 'zsh.zsh', target = '~/.config/zsh/wallust-colors.zsh' }
 rofi = { template = 'rofi.rasi', target = '~/.config/rofi/themes/colours.rasi' }
+gtk3 = { template = 'gtk.css', target = '~/.config/gtk-3.0/gtk.css' }

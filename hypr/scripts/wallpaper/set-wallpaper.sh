@@ -43,6 +43,10 @@ hyprctl reload >/dev/null 2>&1 || true
 # has to be restarted -- the notification colours change with the next popup.
 swaync-client -rs >/dev/null 2>&1 || true
 
+# Folder icons: pick the nearest Papirus colour to the new accent. GTK watches
+# the icon theme directory, so open windows follow without being restarted.
+"$(dirname "$(readlink -f "$0")")/../theme/folder-colors.sh" >/dev/null 2>&1 || true
+
 # swayosd-server reads its CSS once at startup, so it has to be restarted to
 # pick up the colours wallust just regenerated. Only do that when the file
 # actually changed -- the hash is kept in the runtime dir because this script
