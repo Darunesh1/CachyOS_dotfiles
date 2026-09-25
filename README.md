@@ -47,11 +47,11 @@ put it all back.
 |-------|--------------|
 | 1–2 | Installs packages from `packages/pacman.txt` and `packages/aur.txt` (bootstraps `yay` if you have no AUR helper) |
 | 3 | Moves conflicting configs to `~/.config-backup-<timestamp>/` and generates a restore script |
-| 4 | Symlinks `hypr`, `waybar`, `kitty`, `rofi`, `wallust`, `swaync`, `zsh` into `~/.config`, and creates the directories the scripts write into |
+| 4 | Symlinks `hypr`, `waybar`, `kitty`, `rofi`, `wallust`, `swaync`, `zsh` into `~/.config` (plus `thunar/uca.xml` on its own), and creates the directories the scripts write into |
 | 5 | Sets up zsh: `~/.zshenv`, `$HISTFILE`, zinit pre-warm, `chsh` |
 | 6 | Rewrites the two files that hardcode a username |
 | 7 | Picks a wallpaper and runs `wallust` to generate every colour file |
-| 8 | Enables `gcr-ssh-agent.socket`, masks `swaync.service`, pins the login screen (noctalia-greeter) to 100% scale, turns on the Caps/Num Lock popups |
+| 8 | Enables `gcr-ssh-agent.socket`, masks `swaync.service`, pins the login screen (noctalia-greeter) to 100% scale, turns on the Caps/Num Lock popups, makes xarchiver the archive handler |
 | 9 | Optionally builds [ocr-snipper](https://github.com/Darunesh1/ocr-snipper) (ALT+X) and clones the [nvim config](https://github.com/Darunesh1/my_nvim) |
 | 10 | Audits the result and prints a summary of what is and is not in place |
 

@@ -16,6 +16,9 @@ swayosd                 # volume/brightness OSD, themed by wallust
 kitty                   # terminal (lib.lua M.terminal)
 rofi-wayland            # launcher, clipboard, power menu, window switcher
 thunar                  # file manager (lib.lua M.fileManager)
+xarchiver               # archive manager: Thunar's Extract Here / Create Archive
+thunar-archive-plugin   # puts those entries in Thunar's right-click menu
+zip                     # xarchiver shells out to it to CREATE .zip (unzip only reads)
 
 # ── Screenshot, recording, clipboard ────────────────────────────────────────
 grim                    # screenshots (Print, SUPER+P)

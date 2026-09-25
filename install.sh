@@ -448,6 +448,20 @@ stage_symlinks() {
         ok "~/.config/$d -> $REPO/$d"
     done
 
+    # Only uca.xml is linked, never ~/.config/Thunar itself: accels.scm lives
+    # beside it and Thunar rewrites that whenever a shortcut changes. Same
+    # single-file treatment as ~/.zshenv below.
+    run mkdir -p "$CONFIG_HOME/Thunar"
+    if is_correct_link "$CONFIG_HOME/Thunar/uca.xml" "$REPO/thunar/uca.xml"; then
+        ok "~/.config/Thunar/uca.xml already linked"
+    else
+        [[ -e "$CONFIG_HOME/Thunar/uca.xml" && ! -L "$CONFIG_HOME/Thunar/uca.xml" ]] \
+            && backup_item "$CONFIG_HOME/Thunar/uca.xml"
+        run ln -sfn "$REPO/thunar/uca.xml" "$CONFIG_HOME/Thunar/uca.xml"
+        write_restore_script
+        ok "~/.config/Thunar/uca.xml -> repo (Open Terminal Here)"
+    fi
+
     # swayosd is NOT a symlink. There is no swayosd/ directory in this repo --
     # the folder exists only to hold the style.css wallust writes into it. The
     # old README told you to symlink it, which silently broke the theming.
@@ -860,6 +874,42 @@ stage_services() {
     setup_nm_connectivity
     setup_greeter
     setup_swayosd_backend
+    setup_archiver
+    return 0
+}
+
+# Right-click "Extract Here" comes from thunar-archive-plugin, but DOUBLE-click
+# needs xarchiver to be the registered default for each archive type. xdg-mime
+# writes ~/.config/mimeapps.list, which is per-user state rather than repo
+# config, so it is set here instead of being tracked as a file.
+ARCHIVE_MIMES=(
+    application/zip
+    application/x-7z-compressed
+    application/vnd.rar
+    application/gzip
+    application/x-tar
+    application/x-xz
+    application/zstd
+    application/x-bzip2
+)
+
+setup_archiver() {
+    command -v xarchiver >/dev/null || return 0
+    command -v xdg-mime  >/dev/null || return 0
+
+    if [[ "$(xdg-mime query default application/zip 2>/dev/null)" == "xarchiver.desktop" ]]; then
+        ok "xarchiver opens archives by default"
+        return 0
+    fi
+
+    info "xarchiver is installed but is not the default for archives, so"
+    info "double-clicking a .zip does nothing useful."
+    ask "Make xarchiver the default for zip/7z/rar/tar/gz/xz/zst/bz2?" y \
+        || { skip_stage "archiver"; return 0; }
+
+    run xdg-mime default xarchiver.desktop "${ARCHIVE_MIMES[@]}" \
+        && ok "xarchiver set as the archive handler" \
+        || warn "Could not set the archive handler."
     return 0
 }
 
@@ -1262,6 +1312,8 @@ intel_gpu_top|waybar custom/gpu
 fd|file finder (SUPER+SHIFT+E)
 jq|window switcher (SUPER+Tab)
 udiskie|removable media automount
+xarchiver|archive manager (Thunar Extract Here)
+zip|creating .zip archives; unzip alone only extracts
 create_ap|Wi-Fi hotspot (SUPER+CTRL+H), from linux-wifi-hotspot
 nm-applet|network tray icon (autostart)
 blueman-applet|bluetooth tray icon (autostart)
@@ -1283,6 +1335,15 @@ BINARIES
             row MISSING "~/.config/$d" "absent"
         fi
     done
+    # Linked on its own, not with its directory -- see stage 4.
+    if is_correct_link "$CONFIG_HOME/Thunar/uca.xml" "$REPO/thunar/uca.xml"; then
+        row OK "~/.config/Thunar/uca.xml" "-> repo"
+    elif [[ -e "$CONFIG_HOME/Thunar/uca.xml" ]]; then
+        row MISSING "~/.config/Thunar/uca.xml" "not a link into the repo; Open Terminal Here may still call exo-open"
+    else
+        row MISSING "~/.config/Thunar/uca.xml" "absent; Thunar has no Open Terminal Here"
+    fi
+
     # This one must NOT be a symlink -- see stage 4.
     if [[ -L "$CONFIG_HOME/swayosd" ]]; then
         row MISSING "$CONFIG_HOME/swayosd" "is a symlink; must be a real directory"
