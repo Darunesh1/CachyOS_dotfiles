@@ -89,6 +89,46 @@ sddm-greeter-qt6 --test-mode --theme /usr/share/sddm/themes/pixel-hollowknight
 
 That draws the real login screen in a window, with greetd still in charge.
 
+## Making it yours
+
+Two things decide how a qylock theme looks, and neither is the layout:
+
+| | |
+|---|---|
+| `bg.mp4` | `BackgroundVideo.qml` hardcodes `source: "bg.mp4"`, so the background is simply whatever file has that name |
+| `font/` | `Main.qml` builds a `FolderListModel` over `font/`, loads the **first** `.ttf`/`.otf` it finds, and all 8 of its text elements use `font.family: pf.name`. Nothing names the font, so one file swap restyles every word on screen |
+
+Everything else -- clock, password field, session and power buttons, the
+drifting specks -- is plain QML with no game artwork in it. That is why the
+layout survives both swaps, and why "I like the layout but not the pixels" is a
+five-second change rather than a new theme.
+
+`customise-theme.sh` does both:
+
+```sh
+./customise-theme.sh --background ~/Downloads/some-live-wallpaper.mp4
+./customise-theme.sh --font "Adwaita Sans"
+./customise-theme.sh --restore          # both back to stock
+```
+
+It backs the stock files up once (`bg.mp4.orig`, `font/.orig/`) so `--restore`
+is a local copy rather than a re-download.
+
+**The audio track always comes out** (`-an`). A login screen that makes noise is
+a bug, and live-wallpaper downloads usually carry sound. The script refuses to
+install a file that still has an audio stream.
+
+**A source that is already H.264 at 1080p or smaller is remuxed, not
+re-encoded** -- it keeps every bit of quality and takes about a tenth of a
+second. Anything else (or `--compress`) is re-encoded to 1080p30 at CRF 26. A
+still image is accepted too and gets a slow drifting zoom, so a photo can stand
+in for a live wallpaper.
+
+Why `sudo` every time: the theme lives under `/usr/share` because the login
+screen runs as its own user that cannot read `$HOME`. That is also why the login
+screen **cannot follow the desktop wallpaper cycle** -- each change is a
+deliberate copy, not something a script can do 150 times a day behind you.
+
 ## If the video background is too much
 
 The login screen decodes a looping video on the Intel iGPU. If that makes login
