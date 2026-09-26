@@ -266,7 +266,12 @@ hotspot, battery, recording and the rest are told apart at a glance and the icon
 picks up the accent colour. `set-wallpaper.sh` reloads it with
 `swaync-client -rs`. The icon table is in `swaync/README.md`.
 
-**The login screen is greetd + noctalia-greeter** (the CachyOS default). It
+**The login screen is SDDM** running qylock's `pixel-hollowknight` theme --
+see `sddm/README.md` for what that involved (qylock is a theme pack, not a
+login manager, so SDDM replaced greetd) and for the rollback. Everything below
+about noctalia-greeter still applies to that fallback, which stays installed.
+
+**The fallback login screen is greetd + noctalia-greeter** (the CachyOS default). It
 guesses 1.5x scale on this panel, so everything on it looked huge; the
 resolution was always right. `greetd/greeter.toml` pins `[output] scale = 1.0`,
 matching Hyprland. Stage 8 of `install.sh` copies it to

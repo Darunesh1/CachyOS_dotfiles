@@ -22,6 +22,15 @@ zip                     # xarchiver shells out to it to CREATE .zip (unzip only 
 tumbler                 # thumbnail service; without it Thunar shows generic icons
 webp-pixbuf-loader      # so .webp gets thumbnails like png/jpg
 
+# ── Login screen ────────────────────────────────────────────────────────────
+# qylock's themes are SDDM themes, so SDDM is the login manager. Note that
+# Arch's sddm hard-depends on xorg-server: the greeter runs under X even though
+# the session itself is Wayland. greetd + noctalia-greeter stay installed as the
+# fallback -- see sddm/README.md.
+sddm                    # display manager; sddm/install-theme.sh adds the theme
+gst-plugins-base        # video playback for the animated theme background
+gst-plugins-good        # same
+
 # ── Screenshot, recording, clipboard ────────────────────────────────────────
 grim                    # screenshots (Print, SUPER+P)
 slurp                   # region select for screenshots and recording

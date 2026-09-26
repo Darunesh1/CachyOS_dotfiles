@@ -51,7 +51,7 @@ put it all back.
 | 5 | Sets up zsh: `~/.zshenv`, `$HISTFILE`, zinit pre-warm, `chsh` |
 | 6 | Rewrites the two files that hardcode a username |
 | 7 | Picks a wallpaper and runs `wallust` to generate every colour file (including the GTK stylesheet and the folder icon colour) |
-| 8 | Enables `gcr-ssh-agent.socket`, masks `swaync.service`, pins the login screen (noctalia-greeter) to 100% scale, turns on the Caps/Num Lock popups, makes xarchiver the archive handler, turns on Thunar's thumbnails and preview pane |
+| 8 | Enables `gcr-ssh-agent.socket`, masks `swaync.service`, pins the login screen (noctalia-greeter) to 100% scale, turns on the Caps/Num Lock popups, makes xarchiver the archive handler, turns on Thunar's thumbnails and preview pane, installs the SDDM login theme and (on request) switches the login manager |
 | 9 | Optionally builds [ocr-snipper](https://github.com/Darunesh1/ocr-snipper) (ALT+X) and clones the [nvim config](https://github.com/Darunesh1/my_nvim) |
 | 10 | Audits the result and prints a summary of what is and is not in place |
 

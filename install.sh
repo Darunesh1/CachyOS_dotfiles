@@ -876,6 +876,52 @@ stage_services() {
     setup_swayosd_backend
     setup_archiver
     setup_thunar_view
+    setup_sddm
+    return 0
+}
+
+# Login screen: SDDM with qylock's pixel-hollowknight theme. Two separate
+# steps, because they carry very different risk -- installing a theme changes
+# nothing until the display manager is switched, and switching the display
+# manager badly means the next boot has no login screen at all. greetd and
+# noctalia-greeter stay installed so the rollback is one command.
+SDDM_THEME="pixel-hollowknight"
+SDDM_THEME_DIR="/usr/share/sddm/themes/$SDDM_THEME"
+
+setup_sddm() {
+    command -v sddm >/dev/null || return 0
+
+    if [[ -d "$SDDM_THEME_DIR" ]]; then
+        ok "SDDM theme $SDDM_THEME installed"
+    else
+        info "The qylock $SDDM_THEME theme is not installed (~39 MB, fetched with a"
+        info "sparse clone rather than the project's full 1.13 GB repository)."
+        if ask "Fetch and install it?" y; then
+            run "$REPO/sddm/install-theme.sh" "$SDDM_THEME" \
+                && ok "$SDDM_THEME installed" \
+                || warn "Could not install the theme."
+        else
+            skip_stage "sddm-theme"
+        fi
+    fi
+
+    if systemctl is-enabled --quiet sddm.service 2>/dev/null; then
+        ok "sddm is the login manager"
+        return 0
+    fi
+
+    info "greetd is still the login manager. Switching takes effect at the next"
+    info "reboot, and if it goes wrong the way back is a text console"
+    info "(${C_BOLD}Ctrl+Alt+F2${C_RESET}) and:"
+    info "  sudo systemctl disable sddm && sudo systemctl enable greetd && sudo reboot"
+    info "Try the theme first, without switching anything:"
+    info "  sddm-greeter-qt6 --test-mode --theme $SDDM_THEME_DIR"
+    ask "Switch the login manager from greetd to sddm?" n || { skip_stage "sddm-switch"; return 0; }
+
+    run sudo systemctl disable greetd.service \
+        && run sudo systemctl enable sddm.service \
+        && ok "sddm enabled, greetd disabled -- applies at the next reboot" \
+        || warn "Could not switch the login manager."
     return 0
 }
 
@@ -1489,6 +1535,17 @@ BINARIES
         systemctl is-active --quiet swayosd-libinput-backend.service \
             && row OK "swayosd-libinput-backend" "active (Caps/Num Lock popups)" \
             || row WARN "swayosd-libinput-backend" "inactive; Caps/Num Lock show no popup"
+    fi
+    if command -v sddm >/dev/null; then
+        local dm="greetd"
+        systemctl is-enabled --quiet sddm.service 2>/dev/null && dm="sddm"
+        if [[ ! -d "$SDDM_THEME_DIR" ]]; then
+            row WARN "login manager" "$dm; qylock theme $SDDM_THEME not installed"
+        elif [[ "$dm" == sddm ]]; then
+            row OK "login manager" "sddm + $SDDM_THEME"
+        else
+            row WARN "login manager" "theme ready, but greetd is still enabled (stage 8 switches it)"
+        fi
     fi
     if [[ -x /usr/bin/noctalia-greeter-session ]]; then
         local gscale
