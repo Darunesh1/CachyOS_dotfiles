@@ -124,6 +124,31 @@ second. Anything else (or `--compress`) is re-encoded to 1080p30 at CRF 26. A
 still image is accepted too and gets a slow drifting zoom, so a photo can stand
 in for a live wallpaper.
 
+### Layout
+
+`--layout bottom-left` moves the login prompt to the lower left, frameless and
+left-aligned, with the clock over on the right:
+
+```sh
+./customise-theme.sh --layout bottom-left
+```
+
+That one is a **patch**, not a replacement file: qylock is GPL-3 and this repo
+is MIT, so `sddm/patches/login-bottom-left.patch` carries only our own edits
+rather than a copy of someone else's QML. It is always applied to
+`Main.qml.orig`, so running it twice is a no-op, and a dry run goes first --
+if a qylock update rewrites `Main.qml` the patch refuses rather than
+half-applying a broken login screen.
+
+Two things in it are worth knowing if you edit further:
+
+- The **clock's `Row` is anchored, not centred.** The `Item` holding it has no
+  width, so centring the row against the right edge pushed the time clean off
+  the screen -- the date showed and `00:07` did not.
+- The **bottom gradient** exists because frameless text sits straight on the
+  video, and this one has a lightning strike in it. It is one `Rectangle`,
+  marked in the patch, and deleting it changes nothing else.
+
 Why `sudo` every time: the theme lives under `/usr/share` because the login
 screen runs as its own user that cannot read `$HOME`. That is also why the login
 screen **cannot follow the desktop wallpaper cycle** -- each change is a

@@ -4,6 +4,7 @@
 #
 #   customise-theme.sh --background ~/Downloads/something.mp4
 #   customise-theme.sh --font "Adwaita Sans"
+#   customise-theme.sh --layout bottom-left            # move the login prompt
 #   customise-theme.sh --background x.mp4 --compress   # re-encode smaller
 #   customise-theme.sh --restore                       # back to stock
 #
@@ -32,7 +33,9 @@ SECONDS_CAP=30
 COMPRESS=0
 BACKGROUND=""
 FONT=""
+LAYOUT=""
 RESTORE=0
+SELF_DIR="$(dirname "$(readlink -f "$0")")"
 
 usage() { sed -n '3,9p' "$0" | sed 's/^# \?//'; exit "${1:-0}"; }
 
@@ -40,6 +43,7 @@ while (( $# )); do
     case "$1" in
         --background|-b) BACKGROUND="${2:?--background needs a file}"; shift 2 ;;
         --font|-f)       FONT="${2:?--font needs a family name or file}"; shift 2 ;;
+        --layout|-l)     LAYOUT="${2:?--layout needs a name, e.g. bottom-left}"; shift 2 ;;
         --seconds)       SECONDS_CAP="${2:?--seconds needs a number}"; shift 2 ;;
         --compress)      COMPRESS=1; shift ;;
         --theme)         THEME_DIR="/usr/share/sddm/themes/${2:?--theme needs a name}"; shift 2 ;;
@@ -50,7 +54,7 @@ while (( $# )); do
 done
 
 [[ -d "$THEME_DIR" ]] || { echo "customise-theme: no theme at $THEME_DIR -- run install-theme.sh first" >&2; exit 1; }
-[[ -n "$BACKGROUND$FONT" || $RESTORE -eq 1 ]] || usage 1
+[[ -n "$BACKGROUND$FONT$LAYOUT" || $RESTORE -eq 1 ]] || usage 1
 
 note() { printf ':: %s\n' "$*"; }
 
@@ -61,6 +65,12 @@ if (( RESTORE )); then
         note "background restored"
     else
         note "no bg.mp4.orig -- background was never changed"
+    fi
+    if sudo test -f "$THEME_DIR/Main.qml.orig"; then
+        sudo cp -- "$THEME_DIR/Main.qml.orig" "$THEME_DIR/Main.qml"
+        note "layout restored"
+    else
+        note "no Main.qml.orig -- layout was never changed"
     fi
     if sudo test -d "$THEME_DIR/font/.orig"; then
         sudo find "$THEME_DIR/font" -maxdepth 1 -type f -delete
@@ -139,6 +149,32 @@ if [[ -n "$FONT" ]]; then
     note "font installed: $(basename "$font_file")"
     note "  (a variable font may render at its default weight -- if it looks"
     note "   wrong, point --font at a static .ttf instead)"
+fi
+
+# ── Layout ──────────────────────────────────────────────────────────────────
+if [[ -n "$LAYOUT" ]]; then
+    patch_file="$SELF_DIR/patches/login-$LAYOUT.patch"
+    [[ -f "$patch_file" ]] || { echo "customise-theme: no patch at $patch_file" >&2; exit 1; }
+    command -v patch >/dev/null || { echo "customise-theme: patch(1) is needed" >&2; exit 1; }
+
+    # Always patch the pristine file, never the already-patched one: running
+    # this twice should be a no-op, not a double application.
+    sudo test -f "$THEME_DIR/Main.qml.orig" \
+        || sudo cp -- "$THEME_DIR/Main.qml" "$THEME_DIR/Main.qml.orig"
+
+    work=$(mktemp -d); trap 'rm -rf -- "$work"' EXIT
+    sudo cat "$THEME_DIR/Main.qml.orig" > "$work/Main.qml"
+
+    # Dry run first. A qylock update that rewrites Main.qml must fail loudly
+    # rather than leave a half-applied layout on the login screen.
+    if ! patch -s --batch --forward --dry-run -p1 -d "$work" < "$patch_file"; then
+        echo "customise-theme: '$LAYOUT' does not apply to this Main.qml." >&2
+        echo "  The theme has changed upstream; the patch needs redoing against the new file." >&2
+        exit 1
+    fi
+    patch -s --batch --forward -p1 -d "$work" < "$patch_file"
+    sudo install -Dm644 "$work/Main.qml" "$THEME_DIR/Main.qml"
+    note "layout applied: $LAYOUT"
 fi
 
 echo

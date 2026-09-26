@@ -1,0 +1,109 @@
+Login prompt bottom-left, frameless; clock bottom-right.
+
+Applied to qylock's pixel-hollowknight Main.qml by sddm/customise-theme.sh
+--layout bottom-left. A patch rather than a copy of the file: qylock is GPL-3
+and this repo is MIT, and a diff of only these edits keeps the two apart.
+
+  - login block  ->  anchors.left + anchors.bottom, no panel, no hanging line
+  - password     ->  one underline instead of a full border, left-aligned
+  - clock        ->  bottom right; its Row is anchored rather than centred,
+                     because the Item it lives in has no width and centring it
+                     against the right edge pushed the time off screen
+  - a bottom gradient, so frameless text stays readable over the video
+
+If a qylock update changes Main.qml this will refuse to apply; redo it from
+the new file rather than forcing it.
+
+--- a/Main.qml
++++ b/Main.qml
+@@ -38,6 +38,19 @@
+ 
+     Loader { anchors.fill: parent; source: "BackgroundVideo.qml" }
+ 
++    // Readability wash. The prompt is frameless and sits straight on the
++    // video, which has a lightning strike in it. Delete this one Rectangle to
++    // remove the effect; nothing else depends on it.
++    Rectangle {
++        anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
++        height: parent.height * 0.45
++        gradient: Gradient {
++            GradientStop { position: 0.0; color: "#00000000" }
++            GradientStop { position: 0.55; color: "#77000000" }
++            GradientStop { position: 1.0; color: "#dd000000" }
++        }
++    }
++
+     Repeater {
+         model: 60
+         delegate: Rectangle {
+@@ -58,9 +71,9 @@
+ 
+     Item {
+         anchors.bottom: parent.bottom; anchors.bottomMargin: 40 * s
+-        anchors.horizontalCenter: parent.horizontalCenter; opacity: root.ui * 0.9
++        anchors.right: parent.right; anchors.rightMargin: 60 * s; opacity: root.ui * 0.9
+         Row {
+-            anchors.centerIn: parent; spacing: 40 * s
++            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 40 * s
+             Text { text: Qt.formatDate(new Date(), "ddd, MMM d").toUpperCase(); color: root.lore; font.family: pf.name; font.pixelSize: 14 * s; font.letterSpacing: 12 * s; anchors.verticalCenter: parent.verticalCenter }
+             Rectangle { width: 1; height: 40 * s; color: root.lantern; opacity: 0.3; anchors.verticalCenter: parent.verticalCenter }
+             Text { id: ctxt; text: Qt.formatTime(new Date(), "HH:mm"); color: "white"; font.family: pf.name; font.pixelSize: 48 * s; font.letterSpacing: 8 * s; anchors.verticalCenter: parent.verticalCenter
+@@ -70,27 +83,25 @@
+     }
+ 
+     Item {
+-        anchors.top: parent.top; anchors.horizontalCenter: parent.horizontalCenter
+-        width: 320 * s; height: 180 * s; opacity: root.ui
+-        
+-        Rectangle { anchors.top: parent.top; anchors.horizontalCenter: parent.horizontalCenter; width: 2 * s; height: 40 * s; color: root.lantern; opacity: 0.4 }
+-        
++        anchors.left: parent.left; anchors.bottom: parent.bottom
++        anchors.leftMargin: 60 * s; anchors.bottomMargin: 56 * s
++        width: 320 * s; height: 120 * s; opacity: root.ui
++
+         Rectangle {
+-            anchors.top: parent.top; anchors.topMargin: 40 * s; anchors.horizontalCenter: parent.horizontalCenter
+-            width: parent.width; height: 120 * s; color: "#d0050403"; border.color: root.lantern; border.width: 1 * s; radius: 4 * s
+-            
++            anchors.fill: parent; color: "transparent"; border.width: 0
++
+             Column {
+-                anchors.centerIn: parent; spacing: 16 * s; width: 260 * s
+-                Text { text: ((userHelper.currentItem && userHelper.currentItem.uName) ? userHelper.currentItem.uName : (userModel.lastUser || "User")).toUpperCase(); color: "white"; font.family: pf.name; font.pixelSize: 16 * s; font.letterSpacing: 6 * s; anchors.horizontalCenter: parent.horizontalCenter
++                anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 14 * s; width: 300 * s
++                Text { text: ((userHelper.currentItem && userHelper.currentItem.uName) ? userHelper.currentItem.uName : (userModel.lastUser || "User")).toUpperCase(); color: "white"; font.family: pf.name; font.pixelSize: 16 * s; font.letterSpacing: 6 * s
+                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { if (typeof userModel !== "undefined" && userModel.rowCount() > 0) root.userIndex = (root.userIndex + 1) % userModel.rowCount() } } }
+                 
+                 Item {
+                     width: parent.width; height: 36 * s
+-                    Rectangle { anchors.fill: parent; color: "#20000000"; border.color: root.lore; border.width: 1 * s }
+-                    Rectangle { anchors.fill: parent; color: "transparent"; border.color: root.lantern; border.width: 1 * s; opacity: pwd.activeFocus ? 1.0 : 0.0; Behavior on opacity { NumberAnimation { duration: 300 } } }
++                    Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 1 * s; color: root.lore; opacity: 0.55 }
++                    Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 1 * s; color: root.lantern; opacity: pwd.activeFocus ? 1.0 : 0.0; Behavior on opacity { NumberAnimation { duration: 300 } } }
+                     TextInput {
+                         id: pwd; anchors.fill: parent; color: root.lantern; font.family: pf.name; font.pixelSize: 14 * s; font.letterSpacing: 4 * s
+-                        echoMode: TextInput.Password; onTextEdited: err.text = ""; passwordCharacter: "x"; focus: true; clip: true; horizontalAlignment: TextInput.AlignHCenter; verticalAlignment: TextInput.AlignVCenter
++                        echoMode: TextInput.Password; onTextEdited: err.text = ""; passwordCharacter: "x"; focus: true; clip: true; horizontalAlignment: TextInput.AlignLeft; verticalAlignment: TextInput.AlignVCenter
+                         cursorVisible: false; cursorDelegate: Item { width: 0; height: 0 }
+                         selectionColor: root.lore
+                         property bool wasClicked: false
+@@ -98,8 +109,8 @@
+                         Keys.onReturnPressed: doLogin(); Keys.onEnterPressed: doLogin()
+                     }
+                     Text { 
+-                        anchors.centerIn: parent; text: "password..."; color: root.lore; font.family: pf.name; font.pixelSize: 12 * s; font.letterSpacing: 4 * s
+-                        opacity: pwd.text.length === 0 ? 0.5 : 0
++                        anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "password..."; color: root.lore; font.family: pf.name; font.pixelSize: 12 * s; font.letterSpacing: 4 * s
++                        opacity: pwd.text.length === 0 ? 0.85 : 0
+                         Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.InOutSine } }
+                     }
+                     Rectangle {
+@@ -123,7 +134,7 @@
+                         }
+                     }
+                 }
+-                Text { id: err; text: ""; height: 12 * s; verticalAlignment: Text.AlignBottom; color: "#cc2222"; anchors.horizontalCenter: parent.horizontalCenter; font.family: pf.name; font.pixelSize: 10 * s }
++                Text { id: err; text: ""; height: 12 * s; verticalAlignment: Text.AlignBottom; color: "#cc2222"; font.family: pf.name; font.pixelSize: 10 * s }
+             }
+         }
+     }
