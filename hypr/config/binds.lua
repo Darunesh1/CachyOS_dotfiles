@@ -38,13 +38,17 @@ hl.bind(mainMod .. " + slash", hl.dsp.exec_cmd(L.scripts .. "/rofi/keybinds.sh")
 
 
 -- ── Applications ────────────────────────────────────────────────────────────
-hl.bind(mainMod .. " + T", hl.dsp.exec_cmd(L.terminal))
-hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(L.fileManager))
+-- L.app() wraps these in `uwsm app --` so each gets its own cgroup and
+-- systemd-oomd can kill one app instead of the whole desktop. See lib.lua for
+-- the two session kills that prompted it. Only the heavy ones are wrapped;
+-- the rofi launcher is included because apps it starts inherit ITS cgroup.
+hl.bind(mainMod .. " + T", hl.dsp.exec_cmd(L.app(L.terminal)))
+hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(L.app(L.fileManager)))
 -- Find a file by name and open it. Sits next to the file manager on purpose:
 -- E opens the tree, SHIFT + E searches it.
 hl.bind(mainMod .. " + SHIFT + E", hl.dsp.exec_cmd(L.scripts .. "/rofi/find-file.sh"))
-hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("firefox"))
-hl.bind(mainMod .. " + A", hl.dsp.exec_cmd(L.menu))
+hl.bind(mainMod .. " + B", hl.dsp.exec_cmd(L.app("firefox")))
+hl.bind(mainMod .. " + A", hl.dsp.exec_cmd(L.app(L.menu)))
 -- Hotspot menu: on/off, change name and password
 hl.bind(mainMod .. " + CTRL + H", hl.dsp.exec_cmd(L.scripts .. "/network/hotspot-menu.sh"))
 -- Wallpaper picker (pauses auto-cycle; "Random" resumes it)

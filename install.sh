@@ -877,7 +877,65 @@ stage_services() {
     setup_archiver
     setup_thunar_view
     setup_sddm
+    setup_oomd
+    setup_disk_swap
     return 0
+}
+
+# systemd-oomd killed the whole Hyprland session twice (28 and 29 Sep 2026)
+# because zram swap passed 90% and Arch's default ManagedOOMSwap=kill treats
+# that as an emergency. It is not, when swap IS compressed RAM. See
+# system/README.md for the journal lines and the reasoning.
+OOMD_DROPIN="/etc/systemd/system/user-.slice.d/90-no-swap-kill.conf"
+
+setup_oomd() {
+    local src="$REPO/system/oomd/90-no-swap-kill.conf"
+    [[ -f "$src" ]] || return 0
+
+    if [[ -f "$OOMD_DROPIN" ]] && cmp -s "$src" "$OOMD_DROPIN"; then
+        ok "oomd swap-kill drop-in installed"
+        return 0
+    fi
+
+    info "systemd-oomd kills a whole cgroup when swap passes 90%. This machine's"
+    info "only swap is zram (compressed RAM), so that fires on a false alarm --"
+    info "it took the entire desktop down twice. This disables that one rule and"
+    info "leaves memory-pressure detection alone."
+    if ! ask "Install the oomd drop-in?" y; then
+        warn "Skipped -- the session can still be killed when zram fills."
+        return 0
+    fi
+
+    run sudo install -Dm644 "$src" "$OOMD_DROPIN" || { warn "Could not install $OOMD_DROPIN"; return 0; }
+    run sudo systemctl daemon-reload
+    # Restarting oomd is safe: it holds no state, it only watches cgroups.
+    run sudo systemctl restart systemd-oomd \
+        && ok "oomd drop-in installed and active" \
+        || warn "Installed, but systemd-oomd did not restart -- it applies at the next boot."
+}
+
+# zram alone is not swap: it is RAM. Without a disk swapfile, "out of memory"
+# on this 8 GB laptop means out of memory, which is how oomd got provoked.
+setup_disk_swap() {
+    local script="$REPO/system/swap/setup-swapfile.sh"
+    [[ -x "$script" ]] || return 0
+
+    if swapon --show=NAME --noheadings 2>/dev/null | grep -qv zram; then
+        ok "disk swap active ($(swapon --show=NAME,SIZE --noheadings 2>/dev/null | grep -v zram | tr -s ' ' | tr '\n' ' '))"
+        return 0
+    fi
+
+    info "The only swap here is zram, which lives inside RAM. A low-priority"
+    info "swapfile on disk gives the machine somewhere real to put cold pages."
+    info "It goes on its own @swap subvolume so snapper never snapshots it."
+    if ! ask "Create an 8 GiB disk swapfile?" y; then
+        warn "Skipped -- zram remains the only swap."
+        return 0
+    fi
+
+    run sudo "$script" \
+        && ok "disk swapfile active at priority 10 (zram stays at 100)" \
+        || warn "setup-swapfile.sh failed; see its output above."
 }
 
 # Login screen: SDDM with qylock's pixel-hollowknight theme. Two separate
@@ -1536,6 +1594,31 @@ BINARIES
             && row OK "swayosd-libinput-backend" "active (Caps/Num Lock popups)" \
             || row WARN "swayosd-libinput-backend" "inactive; Caps/Num Lock show no popup"
     fi
+    # ── Out-of-memory protection ────────────────────────────────────────────
+    # All three of these were absent when systemd-oomd killed the whole desktop
+    # on 28 and 29 Sep 2026. See system/README.md.
+    if [[ "$(systemctl show user-"$(id -u)".slice -p ManagedOOMSwap --value 2>/dev/null)" == "auto" ]]; then
+        row OK "oomd swap-kill" "disabled for user slices (zram is not disk swap)"
+    else
+        row WARN "oomd swap-kill" "still 'kill'; a full zram can take the whole session down (stage 8)"
+    fi
+    local diskswap
+    diskswap="$(swapon --show=NAME,SIZE --noheadings 2>/dev/null | grep -v zram | tr -s ' ' | tr '\n' ' ')"
+    if [[ -n "$diskswap" ]]; then
+        row OK "disk swap" "$diskswap (zram alone is compressed RAM)"
+    else
+        row WARN "disk swap" "none; zram is the only swap, so OOM arrives with no warning (stage 8)"
+    fi
+    local fxcg
+    fxcg="$(pgrep -x firefox 2>/dev/null | head -1)"
+    if [[ -z "$fxcg" ]]; then
+        row SKIPPED "app cgroups" "firefox not running; cannot tell where it would land"
+    elif grep -q 'app\.slice' "/proc/$fxcg/cgroup" 2>/dev/null; then
+        row OK "app cgroups" "firefox is in its own scope under app.slice"
+    else
+        row WARN "app cgroups" "firefox shares the compositor's cgroup; oomd can only kill the desktop"
+    fi
+
     if command -v sddm >/dev/null; then
         local dm="greetd"
         systemctl is-enabled --quiet sddm.service 2>/dev/null && dm="sddm"
