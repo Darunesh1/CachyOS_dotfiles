@@ -22,6 +22,10 @@ zip                     # xarchiver shells out to it to CREATE .zip (unzip only 
 tumbler                 # thumbnail service; without it Thunar shows generic icons
 webp-pixbuf-loader      # so .webp gets thumbnails like png/jpg
 
+# ── Out-of-memory protection ────────────────────────────────────────────────
+attr                    # getfattr, the only way to prove oomd's avoid flag is
+                        # really set on the compositor (install.sh --check)
+
 # ── Login screen ────────────────────────────────────────────────────────────
 # qylock's themes are SDDM themes, so SDDM is the login manager. Note that
 # Arch's sddm hard-depends on xorg-server: the greeter runs under X even though

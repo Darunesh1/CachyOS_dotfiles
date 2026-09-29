@@ -886,32 +886,61 @@ stage_services() {
 # because zram swap passed 90% and Arch's default ManagedOOMSwap=kill treats
 # that as an emergency. It is not, when swap IS compressed RAM. See
 # system/README.md for the journal lines and the reasoning.
-OOMD_DROPIN="/etc/systemd/system/user-.slice.d/90-no-swap-kill.conf"
+# Three files, and all three are needed -- any one alone is a no-op that looks
+# like a fix. See system/README.md for the journal lines and the ownership rule
+# that forces this shape.
+#
+#   user-.slice   ManagedOOMSwap=auto + ManagedOOMMemoryPressure=auto
+#                 (stop monitoring from a ROOT-owned cgroup)
+#   user@.service ManagedOOMMemoryPressure=kill 80%
+#                 (monitor from a USER-owned cgroup instead, same limit)
+#   compositor    ManagedOOMPreference=avoid
+#                 (only respected because the monitor above shares its owner)
+OOMD_SLICE_DROPIN="/etc/systemd/system/user-.slice.d/90-no-swap-kill.conf"
+OOMD_MANAGER_DROPIN="/etc/systemd/system/user@.service.d/90-oom.conf"
+OOMD_COMPOSITOR_DROPIN="$CONFIG_HOME/systemd/user/wayland-wm@hyprland.desktop.service.d/90-oom.conf"
 
 setup_oomd() {
-    local src="$REPO/system/oomd/90-no-swap-kill.conf"
-    [[ -f "$src" ]] || return 0
+    local slice_src="$REPO/system/oomd/90-no-swap-kill.conf"
+    local mgr_src="$REPO/system/oomd/90-user-manager-oom.conf"
+    local comp_src="$REPO/system/oomd/90-compositor-oom.conf"
+    [[ -f "$slice_src" && -f "$mgr_src" && -f "$comp_src" ]] || return 0
 
-    if [[ -f "$OOMD_DROPIN" ]] && cmp -s "$src" "$OOMD_DROPIN"; then
-        ok "oomd swap-kill drop-in installed"
+    if cmp -s "$slice_src" "$OOMD_SLICE_DROPIN" \
+    && cmp -s "$mgr_src" "$OOMD_MANAGER_DROPIN" \
+    && cmp -s "$comp_src" "$OOMD_COMPOSITOR_DROPIN"; then
+        ok "oomd drop-ins installed (desktop is a last-resort kill candidate)"
         return 0
     fi
 
-    info "systemd-oomd kills a whole cgroup when swap passes 90%. This machine's"
-    info "only swap is zram (compressed RAM), so that fires on a false alarm --"
-    info "it took the entire desktop down twice. This disables that one rule and"
-    info "leaves memory-pressure detection alone."
-    if ! ask "Install the oomd drop-in?" y; then
-        warn "Skipped -- the session can still be killed when zram fills."
+    info "systemd-oomd killed this whole Hyprland session twice (28/29 Sep 2026)."
+    info "Two rules did it: a swap-percentage check that is meaningless when swap"
+    info "is zram, and memory-pressure monitoring from a root-owned slice, where"
+    info "the compositor's request not to be killed is silently ignored."
+    info "This turns off the first, moves the second to user@.service so the"
+    info "request IS honoured, and marks the compositor as avoid."
+    if ! ask "Install the three oomd drop-ins?" y; then
+        warn "Skipped -- the session can still be killed outright."
         return 0
     fi
 
-    run sudo install -Dm644 "$src" "$OOMD_DROPIN" || { warn "Could not install $OOMD_DROPIN"; return 0; }
+    run sudo install -Dm644 "$slice_src" "$OOMD_SLICE_DROPIN" \
+        || { warn "Could not install $OOMD_SLICE_DROPIN"; return 0; }
+    run sudo install -Dm644 "$mgr_src" "$OOMD_MANAGER_DROPIN" \
+        || { warn "Could not install $OOMD_MANAGER_DROPIN"; return 0; }
+    run install -Dm644 "$comp_src" "$OOMD_COMPOSITOR_DROPIN" \
+        || { warn "Could not install $OOMD_COMPOSITOR_DROPIN"; return 0; }
+
     run sudo systemctl daemon-reload
+    run systemctl --user daemon-reload
     # Restarting oomd is safe: it holds no state, it only watches cgroups.
     run sudo systemctl restart systemd-oomd \
-        && ok "oomd drop-in installed and active" \
-        || warn "Installed, but systemd-oomd did not restart -- it applies at the next boot."
+        && ok "oomd drop-ins installed and active" \
+        || warn "Installed, but systemd-oomd did not restart -- applies at the next boot."
+
+    # Measured: `systemctl --user daemon-reload` writes user.oomd_avoid onto the
+    # running compositor's cgroup straight away -- no logout required.
+    info "Confirm the protection is real (not just configured):  ./install.sh --check"
 }
 
 # zram alone is not swap: it is RAM. Without a disk swapfile, "out of memory"
@@ -1597,10 +1626,27 @@ BINARIES
     # ── Out-of-memory protection ────────────────────────────────────────────
     # All three of these were absent when systemd-oomd killed the whole desktop
     # on 28 and 29 Sep 2026. See system/README.md.
-    if [[ "$(systemctl show user-"$(id -u)".slice -p ManagedOOMSwap --value 2>/dev/null)" == "auto" ]]; then
-        row OK "oomd swap-kill" "disabled for user slices (zram is not disk swap)"
+    # Two rows, because the config being right and the protection being REAL are
+    # different things -- the xattr is the only proof, see system/README.md.
+    local oswap opress
+    oswap="$(systemctl show user-"$(id -u)".slice -p ManagedOOMSwap --value 2>/dev/null)"
+    opress="$(systemctl show "user@$(id -u).service" -p ManagedOOMMemoryPressure --value 2>/dev/null)"
+    if [[ "$oswap" == "auto" && "$opress" == "kill" ]]; then
+        row OK "oomd rules" "swap-kill off; pressure monitored from user@.service (user-owned)"
+    elif [[ "$oswap" == "auto" ]]; then
+        row WARN "oomd rules" "swap-kill off, but pressure is not monitored from user@.service (stage 8)"
     else
-        row WARN "oomd swap-kill" "still 'kill'; a full zram can take the whole session down (stage 8)"
+        row WARN "oomd rules" "swap-kill still on; a full zram can take the whole session down (stage 8)"
+    fi
+    local compcg="/sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/session.slice/wayland-wm@hyprland.desktop.service"
+    if [[ ! -d "$compcg" ]]; then
+        row SKIPPED "desktop kill-protection" "compositor cgroup not found (not a uwsm Hyprland session?)"
+    elif ! command -v getfattr >/dev/null; then
+        row SKIPPED "desktop kill-protection" "install attr to verify the avoid flag"
+    elif getfattr -d -m 'user.oomd' "$compcg" 2>/dev/null | grep -q 'oomd_avoid'; then
+        row OK "desktop kill-protection" "compositor marked avoid; oomd kills an app first"
+    else
+        row WARN "desktop kill-protection" "no oomd_avoid xattr; log out and back in, then re-check"
     fi
     local diskswap
     diskswap="$(swapon --show=NAME,SIZE --noheadings 2>/dev/null | grep -v zram | tr -s ' ' | tr '\n' ' ')"
