@@ -142,6 +142,64 @@ keeps the behaviour on a key that never appears in a path. It is passed to fzf a
 `--expect`, so if it ever stops working, check the terminal is still sending `0x1F`
 for <kbd>Ctrl</kbd>+<kbd>/</kbd>; `alt-/` is the more reliably encoded fallback.
 
+## Suggestions are not completion
+
+Two different systems, and they look alike on screen, so it is worth fixing which
+is which:
+
+```
+~/Projects
+❯ cd Projects          <- dim grey: zsh-autosuggestions   (conf.d/suggestions.zsh)
+  ../  CGSMA/  ISP/    <- the popup:  the completion system (conf.d/completion.zsh)
+```
+
+In that real screenshot the popup was correct and the dim text was wrong. The stock
+`history` strategy returns the newest history entry starting with what you typed and
+has no idea which directory you are in, so having once typed `cd Projects` it
+offered it everywhere -- including inside `~/Projects`, where no such directory
+exists.
+
+### Why the fix is not "put the completion strategy first"
+
+The plugin ships a `completion` strategy which would be context-aware by
+construction. Measured by calling the strategy functions directly from
+`~/Projects`, 5 runs each:
+
+| prefix | strategy | suggestion | median |
+|---|---|---|---|
+| `cd ` | history | `cd Projects` | 0.2 ms |
+| `cd ` | completion | `cd ../` | 19.2 ms |
+| `git ` | history | `git clone https://…` | 0.1 ms |
+| `git ` | **completion** | **nothing** | **213.8 ms** (max 330) |
+
+214 ms per keystroke to produce nothing, then falling through to history anyway. It
+forks a zsh and a pty per fetch and caches nothing
+(`src/strategies/completion.zsh:117-135`). It stays last, for prefixes history has
+never seen.
+
+### The custom strategy
+
+`conf.d/suggestions.zsh` defines `valid_history`: the same history lookup, then a
+check that the command can actually run here. `cd`, `pushd`, `nvim`, `vim`, `bat`,
+`cat` and `less` are policed; everything else is passed through untouched. When the
+newest match fails the check it walks further back for one that passes, so in
+`~/Projects` you get `cd CGSMA` rather than nothing.
+
+Measured: 0.17 ms on the fast path, 0.54 ms when it has to walk back, against
+0.12 ms for the stock strategy. Shell startup is unchanged (A/B with the file moved
+aside: 272.7 ms without, 268.4 ms with).
+
+**Accepted downside:** `nvim newfile.md` is withheld, because the file does not
+exist yet. That was a deliberate choice -- policing file arguments catches stale
+suggestions more often than it blocks wanted ones. Narrow it by removing the editors
+from the `case` in `_myarch_suggestion_is_valid`.
+
+The custom-strategy contract is **undocumented upstream** and only derivable from
+`src/fetch.zsh:14-26`: define `_zsh_autosuggest_strategy_<name>`, read the buffer
+from `$1`, assign to a global `suggestion`, leave it empty to fall through. That
+loop also discards any suggestion not starting with the buffer, so a strategy need
+not check that itself.
+
 ## Previews are deliberately a short list
 
 Every fzf-tab preview spawns a process on each TAB. On an 8 GB machine that is

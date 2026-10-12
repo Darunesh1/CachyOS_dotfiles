@@ -1589,6 +1589,17 @@ BINARIES
         row MISSING "completion rules" "conf.d/completion.zsh absent; completion falls back to defaults"
     fi
 
+    # Autosuggestions are a separate system from completion -- the dim grey text,
+    # not the popup -- and get their own row for the same reason: the custom
+    # strategy only exists if conf.d/suggestions.zsh was loaded.
+    if timeout 60 zsh -i -c 'print $ZSH_AUTOSUGGEST_STRATEGY' 2>/dev/null | grep -q 'valid_history'; then
+        row OK "suggestions" "history, filtered to what exists in the current directory"
+    elif [[ -r "$REPO/zsh/conf.d/suggestions.zsh" ]]; then
+        row WARN "suggestions" "suggestions.zsh present but not loaded; check conf.d glob order"
+    else
+        row MISSING "suggestions" "conf.d/suggestions.zsh absent; stale cd suggestions return"
+    fi
+
     if command -v starship >/dev/null; then
         row OK "prompt" "starship"
     elif [[ -r /usr/share/zsh-theme-powerlevel10k/powerlevel10k.zsh-theme ]]; then

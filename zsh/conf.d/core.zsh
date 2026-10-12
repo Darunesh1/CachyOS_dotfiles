@@ -131,7 +131,12 @@ ZSH_PROMPT="1"          # Unset in user.zsh to disable prompt customization
 ZSH_NO_PLUGINS="0"      # Set to "1" in user.zsh to disable plugin loading
 ZSH_COMPINIT_CHECK="24" # Hours between compinit security checks
 
-ZSH_AUTOSUGGEST_STRATEGY=(history completion)
+# ZSH_AUTOSUGGEST_STRATEGY is set in conf.d/suggestions.zsh, which loads after
+# this file. It used to be (history completion) here; the history strategy has no
+# idea which directory you are in, so it offered `cd Projects` while inside
+# ~/Projects. It still appears in the export list below, which is harmless --
+# exporting a name before it is assigned marks it, and the later assignment
+# inherits that.
 
 # History configuration
 HISTFILE=${HISTFILE:-$ZDOTDIR/.zsh_history}
