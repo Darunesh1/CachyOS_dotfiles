@@ -97,6 +97,51 @@ anything that wraps ZLE widgets, which `zsh-autosuggestions` and
 `fast-syntax-highlighting` both do. It used to sit at the end of the file, after
 both.
 
+## Keys inside the popup
+
+| key | does |
+|---|---|
+| <kbd>Tab</kbd> | next candidate (wraps at the end) |
+| <kbd>Shift</kbd>+<kbd>Tab</kbd> | previous candidate |
+| <kbd>Enter</kbd> | select the highlighted one |
+| <kbd>F1</kbd> / <kbd>F2</kbd> | switch between the `[directory]` and `[file]` groups |
+| <kbd>Ctrl</kbd>+<kbd>/</kbd> | descend into the highlighted directory and keep completing |
+| <kbd>Ctrl</kbd>+<kbd>Space</kbd> | select several |
+
+Getting that means setting almost **nothing**, and the omissions are load-bearing:
+
+```zsh
+# correct -- do not "complete" this block from the README
+zstyle ':fzf-tab:*' continuous-trigger 'ctrl-/'
+zstyle ':fzf-tab:*' fzf-flags --height=40% --border=none --info=inline --cycle
+```
+
+`fzf-bindings` and `switch-group` are deliberately **unset**. fzf-tab already
+defaults to `tab:down,btab:up,change:top,ctrl-space:toggle,...`
+(`lib/-ftb-fzf:25`) and to F1/F2 for groups (`lib/-ftb-fzf:36`), which is exactly
+the contract above.
+
+The trap is that fzf-tab **appends** those two styles to its defaults rather than
+replacing them (`lib/-ftb-fzf:31-32`), and fzf honours the *last* binding given for
+a key. So the line fzf-tab's README shows as an example --
+
+```zsh
+zstyle ':fzf-tab:*' fzf-bindings 'tab:accept'      # don't
+```
+
+-- yields `--bind=tab:down,...,tab:accept`, and TAB stops meaning "next candidate"
+and starts meaning "select". The popup then closes on the first entry every time,
+which looks like completion guessing wrongly rather than a keybinding. That block in
+the README is a menu of examples, not a recommended configuration; it was once
+copied in whole and took three good defaults with it.
+
+`continuous-trigger` is the opposite case and must be stated, not omitted: it
+defaults to `/` (`fzf-tab.zsh:156`), so a slash cannot be typed into the filter --
+which is the first thing you reach for when narrowing a list of paths. `ctrl-/`
+keeps the behaviour on a key that never appears in a path. It is passed to fzf as
+`--expect`, so if it ever stops working, check the terminal is still sending `0x1F`
+for <kbd>Ctrl</kbd>+<kbd>/</kbd>; `alt-/` is the more reliably encoded fallback.
+
 ## Previews are deliberately a short list
 
 Every fzf-tab preview spawns a process on each TAB. On an 8 GB machine that is

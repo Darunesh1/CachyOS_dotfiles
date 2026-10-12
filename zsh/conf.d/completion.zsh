@@ -159,10 +159,32 @@ zstyle ':completion:*:*:*:users' ignored-patterns \
 # cannot capture the unambiguous prefix and misbehaves.
 zstyle ':completion:*' menu no
 
-zstyle ':fzf-tab:*' switch-group '<' '>'       # move between the group headings
-zstyle ':fzf-tab:*' continuous-trigger '/'     # keep descending without re-TAB
-zstyle ':fzf-tab:*' fzf-bindings 'tab:accept'
-zstyle ':fzf-tab:*' fzf-flags --height=40% --border=none --info=inline
+# Key bindings inside the popup. The contract is: TAB moves to the next candidate,
+# Shift-Tab to the previous, Enter selects. Getting there means setting almost
+# nothing, because fzf-tab's defaults already are
+# `tab:down,btab:up,change:top,ctrl-space:toggle,...` (lib/-ftb-fzf:25) and F1/F2 to
+# switch group (lib/-ftb-fzf:36).
+#
+# So do NOT set `fzf-bindings` or `switch-group` here. fzf-tab APPENDS those styles
+# to its defaults rather than replacing them (lib/-ftb-fzf:31-32), and fzf honours
+# the LAST binding given for a key. The README's example line
+#
+#     zstyle ':fzf-tab:*' fzf-bindings 'tab:accept'
+#
+# therefore produced `...,tab:down,...,tab:accept` and turned TAB from "next
+# candidate" into "select", so the popup closed on the first entry every time. The
+# README presents that block as an example, not a recommendation; it was copied in
+# wholesale and silently overrode three good defaults.
+#
+# continuous-trigger is the one that must be set rather than omitted: it defaults to
+# `/` (fzf-tab.zsh:156), which means a slash cannot be typed into the filter -- an
+# obvious thing to want when narrowing a list of paths. ctrl-/ keeps the
+# descend-without-pressing-TAB behaviour on a key that is not part of any path.
+zstyle ':fzf-tab:*' continuous-trigger 'ctrl-/'
+
+# --cycle so TAB wraps from the last candidate back to the first instead of parking
+# at the bottom of the list.
+zstyle ':fzf-tab:*' fzf-flags --height=40% --border=none --info=inline --cycle
 # NOT enabling use-fzf-default-opts: upstream warns some FZF_DEFAULT_OPTS flags
 # break the plugin outright (Aloxaf/fzf-tab issue #455).
 
