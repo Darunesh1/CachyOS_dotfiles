@@ -577,8 +577,14 @@ stage_zsh() {
     # 6. A .zcompdump carried in from another machine describes commands that
     #    may not exist here.
     if compgen -G "$REPO/zsh/.zcompdump*" >/dev/null; then
-        if [[ "$REPO/zsh/.zcompdump" -ot "$REPO/zsh/conf.d/core.zsh" ]]; then
-            warn "zsh/.zcompdump is older than conf.d/core.zsh -- likely stale."
+        #    completion.zsh is checked as well as core.zsh: it is now the file that
+        #    actually changes when completion behaviour changes, and a dump older
+        #    than it describes the old rules.
+        local newer_conf=""
+        [[ "$REPO/zsh/.zcompdump" -ot "$REPO/zsh/conf.d/core.zsh" ]] && newer_conf="conf.d/core.zsh"
+        [[ "$REPO/zsh/.zcompdump" -ot "$REPO/zsh/conf.d/completion.zsh" ]] && newer_conf="conf.d/completion.zsh"
+        if [[ -n "$newer_conf" ]]; then
+            warn "zsh/.zcompdump is older than $newer_conf -- likely stale."
             if ask "Delete it? (compinit regenerates it on next shell)" y; then
                 run_sh "rm -f ${REPO@Q}/zsh/.zcompdump*"
                 ok "removed stale completion cache"
@@ -1569,6 +1575,20 @@ BINARIES
     else
         row WARN "login shell" "${SHELL:-unknown}; run chsh -s \$(command -v zsh)"
     fi
+    # Whether completion.zsh is on disk says nothing -- it has to be loaded, and a
+    # stale .zcompdump or a rename that breaks the glob order would leave it inert.
+    # Ask the live shell instead. `ignore-line` is the marker because it is the one
+    # rule nothing else in the stack sets.
+    local comp_rules
+    comp_rules=$(timeout 60 zsh -i -c 'zstyle -L' 2>/dev/null | grep -c "^zstyle ':completion:" || true)
+    if timeout 60 zsh -i -c 'zstyle -L' 2>/dev/null | grep -q 'ignore-line'; then
+        row OK "completion rules" "${comp_rules:-?} active; cd dirs-only, ignore-line, fzf-tab previews"
+    elif [[ -r "$REPO/zsh/conf.d/completion.zsh" ]]; then
+        row WARN "completion rules" "completion.zsh present but not loaded; rm zsh/.zcompdump and retry"
+    else
+        row MISSING "completion rules" "conf.d/completion.zsh absent; completion falls back to defaults"
+    fi
+
     if command -v starship >/dev/null; then
         row OK "prompt" "starship"
     elif [[ -r /usr/share/zsh-theme-powerlevel10k/powerlevel10k.zsh-theme ]]; then

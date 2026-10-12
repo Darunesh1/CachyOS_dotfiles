@@ -185,7 +185,11 @@ __package_manager () {
     ${PM_COMMAND[@]} "$@"
 }
 
-zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'
+# Completion styles live in conf.d/completion.zsh, which is sourced before this
+# file. A lone matcher-list line used to sit here; it was moved there and widened.
+# Do not re-add completion zstyles below this point -- this file loads LAST of the
+# two, so anything here silently overrides completion.zsh.
+
 # Aliases
 alias cls='clear' \
     in='__package_manager -S' \

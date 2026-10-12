@@ -13,6 +13,14 @@ source "${ZINIT_HOME}/zinit.zsh"
 # Plugin: history-search-multi-word
 zinit load zdharma-continuum/history-search-multi-word
 
+# Plugin: fzf-tab
+# Must load after compinit (core.zsh does that before sourcing this file) but
+# BEFORE anything that wraps ZLE widgets -- upstream names zsh-autosuggestions and
+# fast-syntax-highlighting specifically. It used to sit at the end of this file,
+# after both of them. Configured in conf.d/completion.zsh; without those styles it
+# loads and does nothing visible.
+zinit light Aloxaf/fzf-tab
+
 # Plugin: zsh-autosuggestions
 zinit light zsh-users/zsh-autosuggestions
 
@@ -36,9 +44,6 @@ zinit snippet https://github.com/ohmyzsh/ohmyzsh/blob/master/plugins/git/git.plu
 
 # Plugin: zsh-autopair
 zinit light hlissner/zsh-autopair
-
-# Plugin: fzf-tab
-zinit light Aloxaf/fzf-tab
 
 # Plugin: alias-tips
 zinit light djui/alias-tips
