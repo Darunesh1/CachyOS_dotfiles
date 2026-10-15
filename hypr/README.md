@@ -150,31 +150,121 @@ are applied with `hyprctl eval`, since `hyprctl keyword` refuses to work under
 the Lua config manager, and every call is checked for an error rather than
 failing silently.
 
-**A choice sticks for the rest of the Hyprland session**, including across an
-unplug and replug. The menu stores a rule under the output's own name, and a
-named rule is matched before the empty catch-all, so the catch-all never gets
-another look at that connector. `hyprctl reload` is what brings mirroring back
-as the default. (This README used to claim the opposite. It was tested on
-Hyprland 0.56.2 by storing a rule for a connector that did not exist yet and
-then creating it: the stored rule won.)
+**The menu opens with or without a cable attached.** With nothing plugged in
+the choice is simply recorded, and the next display to be connected comes up in
+that mode. That works because the mode is stored on the *catch-all* rule rather
+than under a connector name, so it is not tied to any particular port.
 
-Two consequences worth knowing, both handled in the script:
+**A choice survives `hyprctl reload` and a reboot.** It is written to
+`config/display-mode.lua` (generated, gitignored) and read back by
+`config/monitors.lua` -- the same idiom `scripts/shader-menu.sh` uses for
+`active-shader.lua`. Delete that file to go back to mirroring. Every degenerate
+case falls back to mirroring too: missing, empty, malformed, or a table with no
+usable position, all five checked.
 
-- Every rule that is meant to bring a screen *back on* spells out
-  `disabled = false`. A monitor rule only changes the keys it names, so without
-  it, "Mirror" after "Laptop screen only" returned `ok`, sent a "Mirroring"
-  notification, and left the screen dark.
-- **If the laptop panel is off and you unplug the external, press
-  `SUPER + CTRL + D`.** There is no lit screen for a menu to appear on, so the
-  script skips the menu entirely in that state and just turns the panel back
-  on. A keybind still works on a black screen, which is the whole reason this
-  recovery lives behind one.
+Before this it lived only in the compositor's memory, so the `hyprctl reload`
+that `scripts/wallpaper/set-wallpaper.sh` ran on every wallpaper change --
+including the one `awww-cycle.sh` fires every 200 s -- put an extended display
+back to mirroring within three and a half minutes, with nothing to blame but
+the wallpaper. That reload is gone; see "Wallpaper and colours".
+
+#### Why "External screen only" is no longer a trap
+
+It switches `eDP-1` off. Unplugging the cable then used to leave **zero enabled
+outputs** -- a black screen that only came back when the cable did. Hyprland
+0.56 creates a headless placeholder called `FALLBACK` so the session survives,
+but headless shows nothing.
+
+Three independent things now prevent that, deliberately, because the first
+depends on an event that cannot be verified without real hardware:
+
+1. **`config/monitors.lua` hooks `monitor.removed`** and relights the panel when
+   nothing is lit. Pure Lua, no background process. `hl.get_monitors()` returns
+   only enabled, non-mirroring monitors, so its length *is* the lit-screen
+   count. A `_G` strike counter caps it at three reloads in 30 s -- a reload
+   loop would be worse than a dark screen with working keybinds.
+2. **`eDP-1`'s rule names `disabled = false`**, which makes `SUPER + SHIFT + R`
+   (a plain reload) an unconditional way back. This is the layer that works
+   even if the event never fires.
+3. **`SUPER + CTRL + D` itself.** With no display attached and the panel off
+   there is nowhere to draw a menu, so the script skips it and reloads instead.
+
+All three use a reload rather than an `hl.monitor` eval, and that is not
+arbitrary: monitor rules are applied from a `render.preChecks` listener and
+`canRender()` is false while a monitor is disabled, so re-enabling a panel
+while nothing is rendering can be queued and never applied (upstream discussion
+#15437). A config reload is the only path that calls `ensureMonitorStatus()`
+synchronously.
+
+The mode is also never persisted for this row: it stores the extend geometry
+and applies the panel-off half live only, so a reload or a reboot always comes
+back with a lit screen.
+
+#### Two things measured, against expectation
+
+- **A monitor rule merges; it does not replace.** A rule omitting `scale` left
+  a monitor at `scale = 2`; a rule omitting `disabled` left one switched off.
+  That is why every rule here names every key, and why `eDP-1`'s rule had to
+  say `disabled = false` out loud. (A reading of the Hyprland source says the
+  opposite -- that `add()` erases the rule and re-parses from defaults. The
+  measurement is what this config relies on, and naming every key is correct
+  under either.)
+- **The menu was never the lag.** The theory was that re-applying `eDP-1`'s
+  rule forced a modeset of the panel on every action. Counting
+  `Modesetting eDP-1` across a Mirror -> Extend action gives **0 on both the
+  old and the new script**. Whole-script time is ~40 ms either way. It now does
+  one `hyprctl eval` instead of two (9.2 ms vs 18.8 ms) and one
+  `hyprctl monitors all -j` instead of four, which is tidier but not a fix.
+  What remains is compositor-side: switching mirroring migrates every workspace
+  with an animation each, rebuilds the layout, and updates every window's
+  surface scale.
+
+#### Known upstream, not fixable here
+
+`#15695`/`#15698` -- mirroring fails to resolve when the mirror target connects
+after the mirroring output, `mirrorOf` stays `"none"` (0.56.1, open).
+`#16286` -- mirror to extend needs the monitor off and on again. `#16464` --
+VRAM is never freed on monitor disconnect, one buffer per event, still present
+in 0.56.2, which matters on 8 GB of shared memory if you replug often.
+`SUPER + SHIFT + R` is the documented recovery for all three.
+
+`kanshi`, `shikane` and `way-displays` are deliberately **not** used. Hyprland
+does implement `wlr-output-management-unstable-v1`, but on 0.56.x its `test` is
+a stub, apply acknowledgements are frame-coupled (`#15525`), and a wlr client's
+cached state can shadow config rules indefinitely (open PR `#14343`). In-config
+Lua is the right road here and adds no package.
 
 Closing the lid with a display plugged in does **nothing at all** -- not even
 lock (`scripts/display/lid-close.sh`). The mirror's source is `eDP-1`, so
 locking or powering the laptop panel down would blank the external screen too,
 which is exactly when the lid tends to be shut. The panel stays lit inside the
 closed lid; that is the trade. Unplug and the usual lock-and-suspend is back.
+
+That script filters out `FALLBACK` as well. Without it, a lid close with no
+screen on would have found the placeholder, decided a display was attached, and
+done nothing -- leaving the machine awake and unlocked at the worst moment.
+
+### Wallpaper and colours
+
+`scripts/wallpaper/set-wallpaper.sh` runs `wallust`, which regenerates ten
+template outputs, then re-applies just the three Hyprland colours it changed
+(the two border gradients and the shadow) with one `hyprctl eval` into
+`config/theme-colors.lua`.
+
+It used to finish with a blanket `hyprctl reload`. That re-evaluated every
+config file to pick up three colours -- and `awww-cycle.sh` calls this script
+every 200 s, so it was roughly 430 full config re-evaluations a day, each one
+resetting the display mode. A partial `hl.config` was verified to merge rather
+than reset siblings, three levels deep: `decoration:shadow:range`, `:rounding`,
+`:blur:size` and `:screen_shader` all survive the call untouched.
+
+`config/theme-colors.lua` exists so the colours, their fallbacks and the
+gradient angle have one home -- `config/appearance.lua` reads it at config load
+and the script reads it after every wallust run, and a second copy in shell
+would have drifted the first time one changed.
+
+**One consequence worth knowing:** hand edits to `hypr/config/*.lua` are no
+longer picked up for free within 200 seconds. Use `SUPER + SHIFT + R`.
 
 ### Power Profiles
 
@@ -234,6 +324,26 @@ game's launch option.
 ```sh
 hyprctl eval 'hl.config({ general = { border_size = 4 } })'
 ```
+
+A chunk may hold several statements separated by `;`, which is one eval and one
+reconfigure rather than two. `config/monitors.lua` relies on this.
+
+Useful pieces of the Lua API, with the signatures measured on 0.56.2 rather
+than guessed (the stubs below cover `hl.*`, but these were worth pinning down):
+
+| call | notes |
+|---|---|
+| `hl.on(event, fn)` | Events include `monitor.added`, `monitor.removed`, `monitor.focused`, `monitor.layout_changed`, `config.reloaded`, `hyprland.start`. A `monitor.*` handler receives one `HL.Monitor`. |
+| `hl.get_monitors()` | Returns only **enabled, non-mirroring** monitors, like `hyprctl monitors` rather than `monitors all`. A rule-disabled monitor vanishes from it even with `{ all = true }`. |
+| `hl.timer(fn, { type, timeout })` | `type` is `"oneshot"` or `"repeat"`, `timeout` in **milliseconds**. The function comes first. |
+| `hl.notification.create({ text, duration })` | Hyprland's own on-screen notification, so unlike `notify-send` it is not suppressed by swaync Do Not Disturb. |
+
+**`hyprctl reload` clears every `hl.on` subscription.** Handlers registered from
+a config file therefore do not accumulate across reloads -- they are wiped and
+re-registered by the re-evaluation. The practical consequence: never guard a
+registration with a flag that outlives the reload, because the Lua state *does*
+survive and the flag would permanently block re-registration. A handler
+registered with `hyprctl eval` is gone at the next reload for the same reason.
 
 ### Editor autocompletion
 
