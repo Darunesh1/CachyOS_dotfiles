@@ -54,18 +54,26 @@ if [[ -z "$EXT" ]]; then
     exit 0
 fi
 
-# The external's own rule, with and without mirroring. mirror is passed as an
-# empty string rather than left out when un-mirroring: a rule that simply omits
-# the key may leave the previous mirror in place.
+# The external's own rule, with and without mirroring.
+#
+# Two keys are spelled out rather than left to the default, because a monitor
+# rule only changes what it names and leaves the rest of the monitor's state
+# alone:
+#
+#   mirror = ""      -- omitting the key keeps a mirror that is already set, so
+#                       "Extend" after "Mirror" would stay mirrored.
+#   disabled = false -- omitting it keeps a monitor that was switched off, so
+#                       "Mirror" or "Extend" after "External/Laptop screen only"
+#                       would report success and change nothing on screen.
 ext_mirror() {
-    printf 'hl.monitor({ output = "%s", mode = "preferred", position = "auto", scale = 1, mirror = "%s" })' \
+    printf 'hl.monitor({ output = "%s", mode = "preferred", position = "auto", scale = 1, mirror = "%s", disabled = false })' \
         "$EXT" "$INTERNAL"
 }
 ext_at() {
-    printf 'hl.monitor({ output = "%s", mode = "preferred", position = "%s", scale = 1, mirror = "" })' \
+    printf 'hl.monitor({ output = "%s", mode = "preferred", position = "%s", scale = 1, mirror = "", disabled = false })' \
         "$EXT" "$1"
 }
-internal_on='hl.monitor({ output = "eDP-1", mode = "1920x1080@60", position = "0x0", scale = 1 })'
+internal_on='hl.monitor({ output = "eDP-1", mode = "1920x1080@60", position = "0x0", scale = 1, disabled = false })'
 internal_off='hl.monitor({ output = "eDP-1", disabled = true })'
 
 if internal_disabled; then
