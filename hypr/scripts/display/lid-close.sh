@@ -15,9 +15,16 @@
 
 INTERNAL="eDP-1"
 
+# FALLBACK is filtered out. It is the headless placeholder Hyprland 0.56
+# creates when the last real monitor goes (src/state/FallbackState.hpp) so the
+# session survives; it displays nothing. Counting it as an external display
+# would make closing the lid do nothing at all -- no lock, no suspend -- at the
+# exact moment there is no screen on, which is the worst time to leave the
+# machine awake and unlocked in a bag.
 external_connected() {
     hyprctl monitors all -j 2>/dev/null \
-        | jq -e --arg int "$INTERNAL" 'map(select(.name != $int)) | length > 0' >/dev/null
+        | jq -e --arg int "$INTERNAL" \
+            'map(select(.name != $int and .name != "FALLBACK")) | length > 0' >/dev/null
 }
 
 external_connected && exit 0

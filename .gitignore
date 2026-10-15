@@ -13,5 +13,9 @@ swaync/style.css
 waybar/style/wallust.css
 zsh/wallust-colors.zsh
 rofi/themes/colours.rasi
+# Hyprland runtime state, written by scripts/display/display-menu.sh.
+# (config/active-shader.lua is tracked as an empty file instead -- the two
+# generated-state files are handled differently, deliberately left as is.)
+hypr/config/display-mode.lua
 # Node crash dumps (e.g. from AI CLIs run in the repo)
 report.*.json

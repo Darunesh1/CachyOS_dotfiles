@@ -1780,12 +1780,42 @@ BINARIES
     real_out="$(hyprctl monitors 2>/dev/null | awk '/^Monitor/ {print $2; exit}' || true)"
     row WARN "monitors.lua output" "config: ${cfg_out:-?}${real_out:+   detected: $real_out}"
 
-    # The display menu's three "turn a screen back on" rules have to name
-    # `disabled = false` explicitly, or they report success over a dark screen.
-    if [ "$(grep -c 'disabled = false' "$REPO/hypr/scripts/display/display-menu.sh" || true)" -ge 3 ]; then
-        row OK "display menu" "mirror/extend/laptop-only re-enable a switched-off screen"
+    # Two one-line things stand between "External screen only" and a black
+    # screen, and both have silently regressed before.
+    #
+    # A monitor rule MERGES into the output's existing rule (measured), so a
+    # rule that omits `disabled` keeps a switched-off monitor switched off.
+    # eDP-1's rule naming `disabled = false` is what makes SUPER+SHIFT+R an
+    # unconditional way back; the monitor.removed hook does it automatically.
+    if grep -q 'disabled = false' "$REPO/hypr/config/monitors.lua" \
+       && grep -q 'hl.on("monitor.removed"' "$REPO/hypr/config/monitors.lua"; then
+        row OK "panel rescue" "eDP-1 names disabled=false; monitor.removed reloads"
+    elif grep -q 'disabled = false' "$REPO/hypr/config/monitors.lua"; then
+        row WARN "panel rescue" "reload recovers, but no monitor.removed hook (stays dark until a keypress)"
     else
-        row MISSING "display menu" "a rule is missing 'disabled = false' -- it would fail silently"
+        row MISSING "panel rescue" "eDP-1's rule omits disabled; a reload leaves the panel off"
+    fi
+
+    # Generated per machine, so absent is normal and only means "never chosen".
+    # A malformed file falls back to mirroring silently, hence showing the label.
+    local dmode="$HOME/.config/hypr/config/display-mode.lua" dlabel
+    if [ ! -e "$dmode" ]; then
+        row OK "display mode" "not set; monitors.lua mirrors (the default)"
+    elif dlabel=$(grep -oE 'label[[:space:]]*=[[:space:]]*"[^"]+"' "$dmode" 2>/dev/null | head -1 | cut -d'"' -f2) \
+         && [ -n "$dlabel" ]; then
+        row OK "display mode" "$dlabel (survives reload and reboot)"
+    else
+        row WARN "display mode" "unparseable; monitors.lua falls back to mirroring"
+    fi
+
+    # FALLBACK is Hyprland 0.56's headless placeholder when no real monitor is
+    # left. Treating it as an attached display makes the menu open an invisible
+    # window and makes a lid close do nothing at all.
+    if grep -q 'FALLBACK' "$REPO/hypr/scripts/display/display-menu.sh" \
+       && grep -q 'FALLBACK' "$REPO/hypr/scripts/display/lid-close.sh"; then
+        row OK "FALLBACK filtered" "menu and lid switch ignore the headless placeholder"
+    else
+        row MISSING "FALLBACK filtered" "a script would mistake the placeholder for a real display"
     fi
     # (No waybar interface row: custom/network auto-detects the Wi-Fi device.)
     return 0
