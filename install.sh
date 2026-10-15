@@ -1808,6 +1808,18 @@ BINARIES
         row WARN "display mode" "unparseable; monitors.lua falls back to mirroring"
     fi
 
+    # The blanket reload in set-wallpaper.sh is what discarded the display mode
+    # every 200 s. If it comes back, "Extend" silently reverts to "Mirror".
+    # grep -v '^[[:space:]]*#' because the comment explaining the removal names
+    # the command it removed, and matching that would fail on correct code.
+    if grep -v '^[[:space:]]*#' "$REPO/hypr/scripts/wallpaper/set-wallpaper.sh" | grep -q 'hyprctl reload'; then
+        row MISSING "wallpaper colour path" "hyprctl reload is back; it resets the display mode every 200 s"
+    elif grep -q 'theme-colors.lua' "$REPO/hypr/scripts/wallpaper/set-wallpaper.sh"; then
+        row OK "wallpaper colour path" "targeted eval; monitors.lua is not re-evaluated"
+    else
+        row WARN "wallpaper colour path" "neither a reload nor the targeted eval -- colours may not refresh"
+    fi
+
     # FALLBACK is Hyprland 0.56's headless placeholder when no real monitor is
     # left. Treating it as an attached display makes the menu open an invisible
     # window and makes a lid close do nothing at all.

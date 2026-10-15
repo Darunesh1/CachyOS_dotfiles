@@ -34,10 +34,25 @@ if ! wallust run "$IMG"; then
     exit 1
 fi
 
-# Hyprland re-reads config/wallust.lua for the border colours. Waybar is
-# NOT restarted: reload_style_on_change makes it swap in the regenerated
-# style/wallust.css by itself.
-hyprctl reload >/dev/null 2>&1 || true
+# Re-apply ONLY the three colours wallust just regenerated: the two border
+# gradients and the shadow. Waybar is NOT restarted either --
+# reload_style_on_change makes it swap in the regenerated style/wallust.css
+# by itself.
+#
+# This used to be a blanket `hyprctl reload`, which re-evaluated every config
+# file to pick up two colours. That also re-applied config/monitors.lua, whose
+# catch-all rule put an extended display back to mirroring -- and awww-cycle.sh
+# calls this script every 200 s, so "Extend" silently reverted within three and
+# a half minutes with no user action at all.
+#
+# Verified that a partial hl.config merges rather than resetting siblings:
+# decoration:shadow:range, :rounding, :blur:size and :screen_shader are all
+# unchanged across this call.
+#
+# One behaviour deliberately given up: hand edits to hypr/config/*.lua are no
+# longer picked up for free within 200 s. Use SUPER + SHIFT + R (binds.lua).
+hyprctl eval 'dofile(os.getenv("HOME") .. "/.config/hypr/config/theme-colors.lua").apply()' \
+    >/dev/null 2>&1 || true
 
 # swaync re-reads its stylesheet on request, so unlike swayosd below it never
 # has to be restarted -- the notification colours change with the next popup.
