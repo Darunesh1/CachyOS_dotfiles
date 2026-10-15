@@ -1115,8 +1115,12 @@ GREETER_DST="/var/lib/noctalia-greeter/greeter.toml"
 # Scale the greeter used at this boot, e.g. "1.00" -- from the journal, which,
 # unlike $GREETER_DST, is readable without root.
 greeter_scale() {
+    # `|| true`: with no greeter log this boot the grep finds nothing, the
+    # pipeline fails under `set -o pipefail`, and the caller's assignment would
+    # abort the script. Empty output is a valid answer -- stage_check has a
+    # branch for it.
     journalctl -b -t noctalia-greeter-compositor 2>/dev/null \
-        | grep -o 'eDP-[0-9]* scale=[0-9.]*' | tail -1 | sed 's/.*scale=//'
+        | grep -o 'eDP-[0-9]* scale=[0-9.]*' | tail -1 | sed 's/.*scale=//' || true
 }
 
 setup_greeter() {
@@ -1680,14 +1684,18 @@ BINARIES
         row WARN "desktop kill-protection" "no oomd_avoid xattr; log out and back in, then re-check"
     fi
     local diskswap
-    diskswap="$(swapon --show=NAME,SIZE --noheadings 2>/dev/null | grep -v zram | tr -s ' ' | tr '\n' ' ')"
+    # `|| true` on every one of these: the file runs under `set -euo pipefail`,
+    # so a pipeline whose first stage finds nothing (no non-zram swap, firefox
+    # not running, no `output =` in monitors.lua) fails, and an assignment that
+    # fails takes the whole script with it -- silently, mid-audit.
+    diskswap="$(swapon --show=NAME,SIZE --noheadings 2>/dev/null | grep -v zram | tr -s ' ' | tr '\n' ' ' || true)"
     if [[ -n "$diskswap" ]]; then
         row OK "disk swap" "$diskswap (zram alone is compressed RAM)"
     else
         row WARN "disk swap" "none; zram is the only swap, so OOM arrives with no warning (stage 8)"
     fi
     local fxcg
-    fxcg="$(pgrep -x firefox 2>/dev/null | head -1)"
+    fxcg="$(pgrep -x firefox 2>/dev/null | head -1 || true)"
     if [[ -z "$fxcg" ]]; then
         row SKIPPED "app cgroups" "firefox not running; cannot tell where it would land"
     elif grep -q 'app\.slice' "/proc/$fxcg/cgroup" 2>/dev/null; then
@@ -1768,9 +1776,17 @@ BINARIES
     # Always a reminder: these cannot be verified, only compared.
     group "Hardware-specific (always check by hand)"
     local cfg_out real_out
-    cfg_out="$(grep -oE 'output[[:space:]]*=[[:space:]]*"[^"]+"' "$REPO/hypr/config/monitors.lua" | head -1 | grep -oE '"[^"]+"' | tr -d '"')"
+    cfg_out="$(grep -oE 'output[[:space:]]*=[[:space:]]*"[^"]+"' "$REPO/hypr/config/monitors.lua" | head -1 | grep -oE '"[^"]+"' | tr -d '"' || true)"
     real_out="$(hyprctl monitors 2>/dev/null | awk '/^Monitor/ {print $2; exit}' || true)"
     row WARN "monitors.lua output" "config: ${cfg_out:-?}${real_out:+   detected: $real_out}"
+
+    # The display menu's three "turn a screen back on" rules have to name
+    # `disabled = false` explicitly, or they report success over a dark screen.
+    if [ "$(grep -c 'disabled = false' "$REPO/hypr/scripts/display/display-menu.sh" || true)" -ge 3 ]; then
+        row OK "display menu" "mirror/extend/laptop-only re-enable a switched-off screen"
+    else
+        row MISSING "display menu" "a rule is missing 'disabled = false' -- it would fail silently"
+    fi
     # (No waybar interface row: custom/network auto-detects the Wi-Fi device.)
     return 0
 }
