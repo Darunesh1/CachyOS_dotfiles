@@ -100,7 +100,7 @@ emergency binds: **SUPER+Q** (terminal), **SUPER+R** (run), **SUPER+M** (exit).
 | `SUPER + A` | Open app launcher (rofi) |
 | `SUPER + CTRL + H` | Hotspot menu: on/off, edit name and password. The password is never shown in a notification -- "Show password" opens a dialog and Enter copies the highlighted value. Shares your Wi-Fi while staying connected; works on 2.4 GHz or 5 GHz ch 36-48 / 149-165, not on radar (DFS) ch 52-144. The waybar 󰀂 icon shows whether it can share right now |
 | `SUPER + CTRL + W` | Wallpaper picker (rofi thumbnail grid; pauses auto-cycle, "Random" resumes it) |
-| `SUPER + CTRL + D` | Display menu: mirror, extend left/right, or one screen only. Plugging a monitor or TV in mirrors the laptop screen by default |
+| `SUPER + CTRL + D` | Display menu: mirror, extend left/right, or one screen only. Plugging a monitor or TV in mirrors the laptop screen by default. Also the way back if the laptop panel is off and the external is unplugged |
 | `SUPER + .` | Emoji picker |
 | `SUPER + V` | Clipboard history (rofi; `CTRL + SHIFT + DEL` clears it) |
 | `ALT + X` | OCR snipper (region → text to clipboard) |
@@ -145,11 +145,30 @@ connector is used. Hyprland's own default would have put the display to the
 right as a second desktop instead.
 
 `SUPER + CTRL + D` (`scripts/display/display-menu.sh`) changes it: mirror,
-extend to the left or right, laptop screen only, or external screen only. The
-choice lasts until the cable is pulled -- replugging matches the catch-all rule
-again and mirrors. Rules are applied with `hyprctl eval`, since `hyprctl
-keyword` refuses to work under the Lua config manager, and every call is checked
-for an error rather than failing silently.
+extend to the left or right, laptop screen only, or external screen only. Rules
+are applied with `hyprctl eval`, since `hyprctl keyword` refuses to work under
+the Lua config manager, and every call is checked for an error rather than
+failing silently.
+
+**A choice sticks for the rest of the Hyprland session**, including across an
+unplug and replug. The menu stores a rule under the output's own name, and a
+named rule is matched before the empty catch-all, so the catch-all never gets
+another look at that connector. `hyprctl reload` is what brings mirroring back
+as the default. (This README used to claim the opposite. It was tested on
+Hyprland 0.56.2 by storing a rule for a connector that did not exist yet and
+then creating it: the stored rule won.)
+
+Two consequences worth knowing, both handled in the script:
+
+- Every rule that is meant to bring a screen *back on* spells out
+  `disabled = false`. A monitor rule only changes the keys it names, so without
+  it, "Mirror" after "Laptop screen only" returned `ok`, sent a "Mirroring"
+  notification, and left the screen dark.
+- **If the laptop panel is off and you unplug the external, press
+  `SUPER + CTRL + D`.** There is no lit screen for a menu to appear on, so the
+  script skips the menu entirely in that state and just turns the panel back
+  on. A keybind still works on a black screen, which is the whole reason this
+  recovery lives behind one.
 
 Closing the lid with a display plugged in does **nothing at all** -- not even
 lock (`scripts/display/lid-close.sh`). The mirror's source is `eDP-1`, so

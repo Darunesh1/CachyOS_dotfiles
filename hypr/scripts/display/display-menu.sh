@@ -6,8 +6,16 @@
 # to the left or right, or run on one screen only.
 #
 # Plugging a display in mirrors by default -- that is the catch-all rule in
-# config/monitors.lua, and it is also what a display falls back to when it is
-# unplugged and connected again. Whatever is chosen here lasts until then.
+# config/monitors.lua.
+#
+# Whatever is chosen here then sticks for the rest of the Hyprland session,
+# including across an unplug and replug: `hl.monitor` with a specific output
+# name stores a rule under that name, and a named rule beats the empty catch-all
+# when the connector next appears. Verified on Hyprland 0.56.2 by storing a rule
+# for a connector that did not exist yet and then creating it -- the stored rule
+# won. That is usually what you want (set the desk monitor to extend once and it
+# stays), but it does mean an unfamiliar projector is not guaranteed a mirror.
+# `hyprctl reload` is what forgets the choices.
 #
 # Rules are applied with `hyprctl eval`, not `hyprctl keyword`: under the Lua
 # config manager keyword refuses with "can't work with non-legacy parsers. Use
@@ -48,12 +56,6 @@ apply() {
     return 0
 }
 
-EXT="$(external)"
-if [[ -z "$EXT" ]]; then
-    notify "No external display" "Plug in an HDMI or USB-C cable first."
-    exit 0
-fi
-
 # The external's own rule, with and without mirroring.
 #
 # Two keys are spelled out rather than left to the default, because a monitor
@@ -75,6 +77,26 @@ ext_at() {
 }
 internal_on='hl.monitor({ output = "eDP-1", mode = "1920x1080@60", position = "0x0", scale = 1, disabled = false })'
 internal_off='hl.monitor({ output = "eDP-1", disabled = true })'
+
+# The rule definitions above come before this check because the check needs
+# internal_on: there is a case where the laptop panel is the thing to bring back.
+EXT="$(external)"
+if [[ -z "$EXT" ]]; then
+    # Blind recovery. "External screen only" stores a `disabled = true` rule for
+    # eDP-1, and that rule is kept for the rest of the Hyprland session -- so
+    # unplugging the cable while in that mode leaves no lit screen at all, and
+    # the menu below would have nowhere to draw itself. A keybind still works on
+    # a black screen, so SUPER + CTRL + D is the way out: skip the menu and just
+    # turn the panel back on.
+    if internal_disabled; then
+        apply "Laptop screen" "$internal_on" \
+            && notify "Laptop screen back on" "The external display was unplugged."
+        exit 0
+    fi
+    notify "No external display" "Plug in an HDMI or USB-C cable first."
+    exit 0
+fi
+
 
 if internal_disabled; then
     status="$EXT connected  ·  external screen only"

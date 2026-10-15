@@ -54,7 +54,10 @@ hl.bind(mainMod .. " + CTRL + H", hl.dsp.exec_cmd(L.scripts .. "/network/hotspot
 -- Wallpaper picker (pauses auto-cycle; "Random" resumes it)
 hl.bind(mainMod .. " + CTRL + W", hl.dsp.exec_cmd(L.scripts .. "/wallpaper/wallpaper-menu.sh"))
 
--- Display menu: mirror, extend or use a single screen (external monitor/TV)
+-- Display menu: mirror, extend or use a single screen (external monitor/TV).
+-- Also the way back out of "External screen only" after the cable is pulled:
+-- there is no lit screen for the menu to appear on, so in that one state the
+-- script skips the menu and turns the laptop panel straight back on.
 hl.bind(mainMod .. " + CTRL + D", hl.dsp.exec_cmd(L.scripts .. "/display/display-menu.sh"))
 -- ── Emoji Picker ────────────────────────────────────────────────────────────
 hl.bind(mainMod .. " + period", hl.dsp.exec_cmd("rofimoji --action type"))

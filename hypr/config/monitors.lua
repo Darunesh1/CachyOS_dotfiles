@@ -17,8 +17,10 @@ hl.monitor({
 -- connector is used without naming each one.
 --
 -- SUPER + CTRL + D (scripts/display/display-menu.sh) switches to extend or to a
--- single screen. That lasts until the cable is pulled; replugging mirrors again,
--- because this rule is what a freshly connected monitor is matched against.
+-- single screen. That choice then sticks for the rest of the Hyprland session,
+-- including across an unplug and replug -- the menu stores a rule under the
+-- output's own name, and a named rule is matched before this empty catch-all.
+-- `hyprctl reload` is what brings the default back.
 hl.monitor({
     output   = "",
     mode     = "preferred",
