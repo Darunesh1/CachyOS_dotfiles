@@ -72,3 +72,35 @@ hl.window_rule({
     move  = "20 monitor_h-120",
     float = true,
 })
+
+-- Calculator and Obsidian: float, small, centred.
+--
+-- Classes measured with `hyprctl clients -j` on the running apps rather than
+-- guessed from the binary name: gnome-calculator reports
+-- `org.gnome.Calculator` and obsidian reports `md.obsidian.Obsidian`. Both are
+-- also the `initialClass`, so matching on `class` is stable here.
+--
+-- `center = true` was verified to work on this build: a 700-wide rule landed at
+-- x = 610 on a 1920-wide output (exactly centred), with y offset by the waybar
+-- reservation. Size is a floor, not a promise -- GNOME Calculator refused 500
+-- height and came up 616, because a window's own minimum size wins.
+hl.window_rule({
+    name  = "float-calculator",
+    match = { class = "^(org\\.gnome\\.Calculator)$" },
+
+    float  = true,
+    size   = "480 640",
+    center = true,
+})
+
+hl.window_rule({
+    name  = "float-obsidian",
+    match = { class = "^(md\\.obsidian\\.Obsidian)$" },
+
+    -- Pixels, not "60% 70%": a percentage size was accepted without a config
+    -- error and then ignored -- Obsidian came up at the full 1920x1080. Pixels
+    -- are honoured exactly (measured 1200x760 at x=360, dead centre).
+    float  = true,
+    size   = "1200 760",
+    center = true,
+})
