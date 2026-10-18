@@ -1256,10 +1256,18 @@ NVIM_DIR="$HOME/.config/nvim"
 
 # leptess binds Tesseract through bindgen, so libclang is a build-time
 # requirement on top of the OCR libraries themselves. main.rs initialises
-# Tesseract with "eng+tam": without the Tamil data every run fails with
+# Tesseract with "eng": the language list is a hard requirement, not a hint, so
+# without /usr/share/tessdata/eng.traineddata every run fails at init with
 # "Tesseract initialization failed". notify-send reports the result.
-OCR_DEPS=(clang tesseract tesseract-data-eng tesseract-data-tam leptonica libnotify)
-OCR_TESSDATA=(/usr/share/tessdata/eng.traineddata /usr/share/tessdata/tam.traineddata)
+#
+# English only. The upstream source used to ask for "eng+tam", which made the
+# Tamil data mandatory for every snip regardless of what was on screen; that is
+# gone as of ocr-snipper 38a80f4, and tesseract-data-tam is no longer needed
+# here. A binary built before that commit still demands it -- the audit row
+# below detects exactly that case, because the dependency lives in the compiled
+# string and nothing on this side can see it otherwise.
+OCR_DEPS=(clang tesseract tesseract-data-eng leptonica libnotify)
+OCR_TESSDATA=(/usr/share/tessdata/eng.traineddata)
 
 # True when cargo actually runs. `command -v cargo` is not enough: the rustup
 # package ships a /usr/bin/cargo shim that fails until a toolchain is set.
@@ -1277,7 +1285,7 @@ install_ocr_snipper() {
     command -v rustup >/dev/null || rust_ready || missing+=(rustup)
 
     # Dependencies first, even when the binary exists: a built binary without
-    # the Tamil tessdata is just as dead as no binary.
+    # the English tessdata is just as dead as no binary.
     if [[ ${#missing[@]} -gt 0 ]]; then
         warn "Dependencies missing: ${missing[*]}"
         if ask "Install them?" y; then
@@ -1760,8 +1768,14 @@ BINARIES
         fi
     elif [[ ${#tessdata_missing[@]} -gt 0 ]]; then
         row WARN "ocr-snipper" "built, but missing ${tessdata_missing[*]}; ALT+X fails"
+    elif grep -qa 'eng+tam' "$OCR_BIN" 2>/dev/null; then
+        # A binary from before ocr-snipper 38a80f4. The language list is baked
+        # into the executable, so this string is the only way to tell, and it
+        # matters: that build dies at init unless tesseract-data-tam is also
+        # installed. Rebuilding is stage 9.
+        row WARN "ocr-snipper" "built from pre-English-only source; rebuild (stage 9) or install tesseract-data-tam"
     else
-        row OK "ocr-snipper" "ALT+X works"
+        row OK "ocr-snipper" "ALT+X works (English)"
     fi
     [[ -d "$NVIM_DIR" ]] \
         && row OK "~/.config/nvim" "present" \
