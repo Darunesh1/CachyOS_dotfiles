@@ -15,21 +15,31 @@
 # standing in. So having once typed `cd Projects`, it offered it everywhere --
 # including inside ~/Projects, where that directory does not exist.
 #
-# WHY NOT JUST PUT `completion` FIRST
-# The plugin ships a `completion` strategy that asks the completion system instead,
-# which would be context-aware by construction. Measured on this machine by calling
-# the strategy functions directly, 5 runs each, from ~/Projects:
+# WHY THE `completion` STRATEGY IS GONE
+# The plugin ships a `completion` strategy that asks the completion system
+# instead, so it is context-aware by construction. It used to sit here as a last
+# resort "for prefixes history has never seen". That was the wrong call and it
+# has been removed. Re-measured by calling the strategy functions directly,
+# 5 runs each:
 #
-#   prefix   strategy         suggestion               median
-#   'cd '    history          cd Projects              0.2 ms   <- the bug
-#   'cd '    completion       cd ../                  19.2 ms
-#   'git '   history          git clone https://...    0.1 ms
-#   'git '   completion       (nothing)              213.8 ms   <- max 330 ms
+#   prefix                 strategy      suggestion                   median
+#   'cd '                  completion    cd ../                        8.1 ms
+#   'hyprct'               completion    hyprctl                      14.3 ms
+#   'docker comp'          completion    (nothing)                    82.4 ms
+#   'git '                 completion    (nothing)                   150.9 ms
+#   'sudo pacman -S fire'  completion    sudo pacman -S firecracker  303.0 ms
+#   (every prefix)         valid_history as below                      0.0 ms
 #
-# 214 ms per keystroke to return nothing, and then it falls through to history
-# anyway. That strategy forks a zsh and a pty per fetch and caches nothing
-# (src/strategies/completion.zsh:117-135). It stays last, as a fallback for
-# prefixes history has never seen.
+# The cost is paid PER KEYSTROKE, and only on prefixes history does not know --
+# which is every command you have not typed before, i.e. exactly when it was
+# supposed to help. 150 ms to return nothing for `git `, 303 ms to answer
+# `firecracker`, which is just the alphabetically first match. `cd ../` is not a
+# suggestion anyone wants either. It forks a zsh and a pty per fetch and caches
+# nothing (src/strategies/completion.zsh:117-135).
+#
+# WHAT IS LOST: a command never typed before now gets no grey suggestion at all.
+# TAB still completes it -- the completion system (conf.d/completion.zsh) is a
+# different mechanism and is untouched by this.
 #
 # LOAD ORDER: this file must keep a name that sorts AFTER "core", because
 # core.zsh is where ZSH_AUTOSUGGEST_STRATEGY used to be set and this file now
@@ -115,6 +125,15 @@ _zsh_autosuggest_strategy_valid_history() {
     # move on to the next strategy.
 }
 
-# Replaces core.zsh's old `(history completion)`. completion stays as the last
-# resort for prefixes history has never seen, where its latency is worth paying.
-ZSH_AUTOSUGGEST_STRATEGY=(valid_history completion)
+# One strategy, deliberately. Replaces core.zsh's old `(history completion)` and
+# then this file's own `(valid_history completion)` -- see the block at the top
+# for why the second name was dropped.
+#
+# A measurement worth keeping, because it is the one that says `valid_history`
+# itself is not the thing that felt wrong: from $HOME against the real
+# 1225-entry history, stock `history` and `valid_history` returned byte-identical
+# suggestions for every prefix tried -- 'cd ', 'cd M', 'cd P', 'nvim ', 'cat ',
+# 'git ', 'ls ', 'hyprctl ', 'pacman '. Where the suggestion was empty it was
+# empty for both, because the command was missing from the history FILE, not
+# filtered out here. conf.d/history.zsh is what fixes that.
+ZSH_AUTOSUGGEST_STRATEGY=(valid_history)

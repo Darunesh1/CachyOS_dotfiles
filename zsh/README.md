@@ -5,9 +5,9 @@ The load chain is order-sensitive and none of it is obvious from the filenames.
 ```
 ~/.zshenv -> zsh/.zshenv          sets ZDOTDIR=$HOME/.config/zsh
   └─ sources $ZDOTDIR/conf.d/*.zsh in GLOB order, not logical order:
-       binds.zsh  ->  completion.zsh  ->  core.zsh  ->  env.zsh  ->  prompt.zsh
-          └─ core.zsh drives everything: compinit, plugins, history, aliases,
-             and sources .zshrc LAST
+       binds -> completion -> core -> env -> history -> prompt -> suggestions
+          └─ core.zsh drives everything: compinit, plugins, aliases, and sources
+             .zshrc LAST. history.zsh must sort AFTER it: it overrides HISTSIZE.
 ```
 
 `~/.config/zsh` is a symlink to this directory, so `$ZDOTDIR` *is* the repo.
@@ -159,23 +159,30 @@ has no idea which directory you are in, so having once typed `cd Projects` it
 offered it everywhere -- including inside `~/Projects`, where no such directory
 exists.
 
-### Why the fix is not "put the completion strategy first"
+### The completion strategy was tried as a fallback, and removed
 
-The plugin ships a `completion` strategy which would be context-aware by
-construction. Measured by calling the strategy functions directly from
-`~/Projects`, 5 runs each:
+The plugin ships a `completion` strategy which is context-aware by construction,
+and it sat last in the list "for prefixes history has never seen". That was the
+wrong call. Re-measured by calling the strategy functions directly, 5 runs each:
 
 | prefix | strategy | suggestion | median |
 |---|---|---|---|
-| `cd ` | history | `cd Projects` | 0.2 ms |
-| `cd ` | completion | `cd ../` | 19.2 ms |
-| `git ` | history | `git clone https://…` | 0.1 ms |
-| `git ` | **completion** | **nothing** | **213.8 ms** (max 330) |
+| `cd ` | completion | `cd ../` | 8.1 ms |
+| `hyprct` | completion | `hyprctl` | 14.3 ms |
+| `docker comp` | completion | nothing | 82.4 ms |
+| `git ` | **completion** | **nothing** | **150.9 ms** |
+| `sudo pacman -S fire` | **completion** | **`sudo pacman -S firecracker`** | **303.0 ms** |
+| any | `valid_history` | as below | **0.0 ms** |
 
-214 ms per keystroke to produce nothing, then falling through to history anyway. It
-forks a zsh and a pty per fetch and caches nothing
-(`src/strategies/completion.zsh:117-135`). It stays last, for prefixes history has
-never seen.
+The cost is per **keystroke**, and it is only paid on prefixes history does not
+know — which is exactly a command you have not typed before, the case it was
+supposed to serve. 150 ms to answer nothing; 303 ms to answer `firecracker`,
+which is only the alphabetically first match. It forks a zsh and a pty per fetch
+and caches nothing (`src/strategies/completion.zsh:117-135`).
+
+`ZSH_AUTOSUGGEST_STRATEGY` is now `(valid_history)` alone. What is lost: a
+command never typed before gets no grey suggestion. TAB still completes it —
+that is the completion system, a different mechanism.
 
 ### The custom strategy
 
@@ -199,6 +206,54 @@ The custom-strategy contract is **undocumented upstream** and only derivable fro
 from `$1`, assign to a global `suggestion`, leave it empty to fall through. That
 loop also discards any suggestion not starting with the buffer, so a strategy need
 not check that itself.
+
+## The suggestion pool -- conf.d/history.zsh
+
+A later complaint that suggestions were "wrong or missing" turned out not to be
+the strategy at all. Measured from `$HOME` against the real 1,225-entry history,
+`valid_history` and the stock `history` strategy returned **identical**
+suggestions for every prefix tried (`cd `, `cd M`, `cd P`, `nvim `, `cat `,
+`git `, `ls `, `hyprctl `, `pacman `). Where one was empty, both were — because
+the command was missing from the history *file*.
+
+`core.zsh` set `HISTFILE`, `HISTSIZE` and `SAVEHIST` and no history **option**.
+The live shell's `setopt`, which prints only non-default options, printed exactly
+one line: `autocd`. So:
+
+| | before | after |
+|---|---|---|
+| history file | 1292 lines / **391 unique** | 402 lines / **343 unique entries** |
+| `exit` entries | 147 | 0 (in `HISTORY_IGNORE`) |
+| commands from other terminals | invisible until that shell exits | imported at each prompt |
+
+The second row is the one that mattered. With five zsh processes running, the
+history file contained **zero** `docker`, `npm`, `pnpm`, `mvn` or `bat` lines
+while a Maven JVM, a vite dev server and eight Docker containers were up — every
+one of those had been typed in a tab that never closed. `setopt share_history`
+fixes that; `man zshoptions` is explicit that `INC_APPEND_HISTORY` must then stay
+off, and that the three append options are mutually exclusive.
+
+**Accepted downside:** up-arrow and Ctrl-R now walk other terminals' commands
+too. The documented escape hatch is the `set-local-history` zle binding.
+
+`HIST_EXPIRE_DUPS_FIRST` needs `HISTSIZE` > `SAVEHIST` or the man page says it
+degrades to `HIST_IGNORE_ALL_DUPS`, so `history.zsh` raises `HISTSIZE` to 20000
+and leaves `SAVEHIST` at 10000.
+
+### If you ever dedupe the history file by hand, do not do it per line
+
+A plain-format zsh history stores a multi-line command as several physical lines,
+the inner ones ending in `\`. The file had **66** such lines. A line-based
+`awk`/`sort -u` dedupe silently destroyed every multi-line entry in it — 15
+commands, including two `rsync`/`sudo install` invocations — because it kept the
+last copy of a shared continuation line and orphaned its parent.
+
+Use zsh's own parser (`fc -R`, then walk `$history`), dedupe whole entries, and
+write back in extended format escaping each embedded newline as backslash +
+newline. Then verify by re-reading the file and diffing the entry set against a
+backup. One harness quirk to expect while verifying: `fc -R` inside a
+non-interactive `zsh -f` script drops the file's **final** entry, so a count that
+is short by exactly one is the harness, not data loss.
 
 ## Previews are deliberately a short list
 

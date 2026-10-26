@@ -1,4 +1,4 @@
-zsh/.zsh_history
+zsh/.zsh_history*
 .zcompdump*
 docs/node_modules/
 docs/.docusaurus/

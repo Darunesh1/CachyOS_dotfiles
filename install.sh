@@ -1604,12 +1604,38 @@ BINARIES
     # Autosuggestions are a separate system from completion -- the dim grey text,
     # not the popup -- and get their own row for the same reason: the custom
     # strategy only exists if conf.d/suggestions.zsh was loaded.
-    if timeout 60 zsh -i -c 'print $ZSH_AUTOSUGGEST_STRATEGY' 2>/dev/null | grep -q 'valid_history'; then
-        row OK "suggestions" "history, filtered to what exists in the current directory"
+    local strategy
+    strategy=$(timeout 60 zsh -i -c 'print $ZSH_AUTOSUGGEST_STRATEGY' 2>/dev/null || true)
+    if [[ "$strategy" == *valid_history* && "$strategy" != *completion* ]]; then
+        row OK "suggestions" "valid_history only; filtered to what exists in the current directory"
+    elif [[ "$strategy" == *completion* ]]; then
+        # Not cosmetic: the completion strategy was measured at 150-303 ms per
+        # KEYSTROKE, and it only runs on prefixes history does not know.
+        row WARN "suggestions" "the completion strategy is back; 150-303 ms per keystroke"
     elif [[ -r "$REPO/zsh/conf.d/suggestions.zsh" ]]; then
         row WARN "suggestions" "suggestions.zsh present but not loaded; check conf.d glob order"
     else
         row MISSING "suggestions" "conf.d/suggestions.zsh absent; stale cd suggestions return"
+    fi
+
+    # The suggestion POOL, which is a separate failure from the strategy and the
+    # one that actually felt broken: with no history options set, duplicates are
+    # never collapsed (1292 lines for 391 unique commands, measured) and nothing
+    # typed in another terminal is suggestable until that shell exits. Ask the
+    # live shell, because conf.d/history.zsh existing on disk proves nothing.
+    local hist_opts
+    hist_opts=$(timeout 60 zsh -i -c '
+        for o in sharehistory histignorealldups histfindnodups; do
+            [[ -o $o ]] && print -n "$o "
+        done' 2>/dev/null || true)
+    if [[ "$hist_opts" == *sharehistory*histignorealldups*histfindnodups* ]]; then
+        row OK "history options" "shared between terminals, duplicates collapsed"
+    elif [[ -n "$hist_opts" ]]; then
+        row WARN "history options" "only: ${hist_opts% }; conf.d/history.zsh partly applied"
+    elif [[ -r "$REPO/zsh/conf.d/history.zsh" ]]; then
+        row WARN "history options" "history.zsh present but not loaded; check conf.d glob order"
+    else
+        row MISSING "history options" "conf.d/history.zsh absent; suggestions see only this shell"
     fi
 
     if command -v starship >/dev/null; then
