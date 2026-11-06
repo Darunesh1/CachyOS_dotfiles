@@ -1,0 +1,43 @@
+# SwayOSD server settings.
+#
+# WHY THIS FILE EXISTS: the Fn brightness-down key could not reach a black
+# screen. The packaged /etc/xdg/swayosd/config.toml ships
+# `min_brightness = 5`, uncommented, which pinned the backlight at 4800 of
+# 96000 on intel_backlight -- exactly 5%.
+#
+# That file could not simply be edited. `pacman -Qi swayosd` reports
+# `Backup Files : None`, so it is not a pacman backup file and any local change
+# to it is silently discarded on the next swayosd upgrade.
+#
+# CAREFUL: this file REPLACES the system one, it does not merge with it.
+# find_user_config() in src/config/user.rs checks
+# user_config_dir()/swayosd/config.toml first, then the system dirs, and
+# returns the FIRST file it finds. Anything left out here falls back to
+# SwayOSD's compiled-in default, NOT to /etc/xdg/swayosd/config.toml. So the
+# settings below that look redundant are carried over on purpose.
+#
+# This directory holds ONLY this file. Do NOT add swayosd to LINK_DIRS in
+# install.sh: ~/.config/swayosd must stay a real directory because wallust
+# writes style.css into it. Only config.toml is linked, the same single-file
+# treatment as thunar/uca.xml.
+
+[server]
+## The minimum brightness that can be reached, in percent.
+##
+## 0 on purpose: brightness-down must be able to reach a black screen.
+## SwayOSD scales this into a raw floor as min_raw = div_round_u32(min * max,
+## 100) (src/actions/brightness_backend/brightnessctl.rs), so 0 -> raw 0.
+##
+## This does not lock you out. raise() is (curr + step).min(max).max(min_raw),
+## so raising from 0 lands on `step`, not on 0. Blind recovery if a key ever
+## misbehaves: `brightnessctl set 20%`.
+##
+## A 5% floor is restored on wake instead, by
+## hypr/scripts/display/brightness-floor.sh -- see hypr/hypridle.conf.
+min_brightness = 0
+
+## Carried over from /etc/xdg/swayosd/config.toml. See the REPLACES note above.
+keyboard_backlight = true
+duration = 1000
+
+[client]

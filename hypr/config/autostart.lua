@@ -41,6 +41,13 @@ hl.on("hyprland.start", function()
     -- Start SwayOSD daemon
     hl.exec_cmd("swayosd-server")
 
+    -- Undo a deliberate zero brightness at session start. swayosd/config.toml
+    -- sets min_brightness = 0 so the Fn key can reach a black screen; without
+    -- this, a reboot or a compositor crash while the backlight was at 0 comes
+    -- back to a black panel. hypridle's after_sleep_cmd covers the suspend
+    -- path; this covers the start path. Raises only, never lowers.
+    hl.exec_cmd(L.scripts .. "/display/brightness-floor.sh")
+
     -- Automount removable media
     hl.exec_cmd("udiskie --automount --notify --tray")
 

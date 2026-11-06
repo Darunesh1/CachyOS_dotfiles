@@ -136,6 +136,35 @@ Media and brightness keys are handled via SwayOSD, and work while the screen is 
 Closing the laptop lid locks and suspends -- unless an external display is
 plugged in, in which case nothing happens and the picture stays on it.
 
+**Brightness goes all the way to black.** The packaged
+`/etc/xdg/swayosd/config.toml` ships `min_brightness = 5`, which pinned the
+backlight at 4800 of 96000 on `intel_backlight`. `swayosd/config.toml` in this
+repo sets it to `0` instead, linked to `~/.config/swayosd/config.toml` -- a
+local override rather than an edit, because that system file is not a pacman
+backup file (`Backup Files : None`) and an edit there would be wiped by the next
+swayosd upgrade. Since SwayOSD's step is 5% of max, one press of brightness-down
+from 5% goes straight to `0`, and one press of brightness-up comes back to
+4800: `raise` is `(curr + step).min(max).max(min_raw)`, so zero is not a trap.
+Blind recovery if a key ever misbehaves: `brightnessctl set 20%`. Finer steps at
+the low end come from the waybar backlight module, which moves 1% at a time and
+was never subject to the floor.
+
+A 5% floor is put back on wake by `scripts/display/brightness-floor.sh`, so a
+machine suspended at `0` never comes back to a black panel. It is wired in three
+places: `hypridle.conf`'s `after_sleep_cmd`, the 300 s listener's `on-resume`
+(the locked-but-not-yet-suspended gap), and `config/autostart.lua` for session
+start. The script raises only -- it never lowers a brightness set deliberately
+high -- and exits `0` when there is no backlight. **The two resume hooks only
+work while `hypridle` is running**; `autostart.lua` starts it, and
+`pgrep -x hypridle` is how to check.
+
+While wiring that up, `after_sleep_cmd = hyprctl dispatch dpms on` turned out to
+have been failing silently all along. Under the Lua config plugin it errors with
+`[string "return hl.dispatch(dpms on)"]:1: ')' expected near 'on'` and exits 7.
+The working form is `hyprctl dispatch 'hl.dsp.dpms("on")'`, which returns `ok`.
+The two commands are joined with `;` rather than `&&` for the same reason: a
+failing dpms call must not be able to skip the brightness restore.
+
 ### External displays
 
 Plug in HDMI (or DisplayPort over USB-C) and it **mirrors** the laptop screen.

@@ -495,9 +495,12 @@ stage_symlinks() {
         fi
     fi
 
-    # swayosd is NOT a symlink. There is no swayosd/ directory in this repo --
-    # the folder exists only to hold the style.css wallust writes into it. The
-    # old README told you to symlink it, which silently broke the theming.
+    # swayosd is NOT a symlink, even though swayosd/ now exists in the repo.
+    # The folder also holds the style.css wallust writes into it, which the repo
+    # does not track; linking the whole directory would silently break the
+    # theming, as the old README's advice did. Only config.toml is linked, below
+    # -- the same single-file treatment as thunar/uca.xml. Do NOT add swayosd to
+    # LINK_DIRS.
     if [[ -L "$CONFIG_HOME/swayosd" ]]; then
         warn "$CONFIG_HOME/swayosd is a symlink (the old README's mistake)."
         if ask "Replace it with a real directory?" y; then
@@ -509,6 +512,22 @@ stage_symlinks() {
     else
         run mkdir -p "$CONFIG_HOME/swayosd"
         ok "$CONFIG_HOME/swayosd (real directory, holds wallust's style.css)"
+    fi
+
+    # swayosd/config.toml carries min_brightness = 0, which is what lets the Fn
+    # brightness-down key reach a black screen. The packaged
+    # /etc/xdg/swayosd/config.toml pins it at 5% and is not a pacman backup
+    # file, so editing that one would be undone by the next swayosd upgrade.
+    # SwayOSD's find_user_config() reads this file INSTEAD of the system one --
+    # it does not merge -- which is why ours repeats the other settings.
+    if is_correct_link "$CONFIG_HOME/swayosd/config.toml" "$REPO/swayosd/config.toml"; then
+        ok "~/.config/swayosd/config.toml already linked"
+    else
+        [[ -e "$CONFIG_HOME/swayosd/config.toml" && ! -L "$CONFIG_HOME/swayosd/config.toml" ]] \
+            && backup_item "$CONFIG_HOME/swayosd/config.toml"
+        run ln -sfn "$REPO/swayosd/config.toml" "$CONFIG_HOME/swayosd/config.toml"
+        write_restore_script
+        ok "~/.config/swayosd/config.toml -> repo (brightness floor 0, not 5%)"
     fi
 
     # Directories the scripts write into. awww-cycle.sh spins on an empty shuf
@@ -1598,6 +1617,40 @@ BINARIES
         row OK "$CONFIG_HOME/swayosd" "real directory (correct)"
     else
         row MISSING "$CONFIG_HOME/swayosd" "absent; wallust cannot write style.css"
+    fi
+
+    # Ask the config SwayOSD would actually read, not just whether our file is
+    # linked. The packaged /etc/xdg/swayosd/config.toml pins min_brightness at
+    # 5%, and find_user_config() returns the first file it finds, so a missing
+    # link means the Fn brightness key silently stops at 4800 of 96000 again.
+    # Note swayosd-server only reads this at startup -- restart it after a change.
+    local osd_min
+    if [[ -f "$CONFIG_HOME/swayosd/config.toml" ]]; then
+        osd_min=$(sed -n 's/^[[:space:]]*min_brightness[[:space:]]*=[[:space:]]*\([0-9]\+\).*/\1/p' \
+            "$CONFIG_HOME/swayosd/config.toml" | tail -1)
+    else
+        osd_min=$(sed -n 's/^[[:space:]]*min_brightness[[:space:]]*=[[:space:]]*\([0-9]\+\).*/\1/p' \
+            /etc/xdg/swayosd/config.toml 2>/dev/null | tail -1)
+    fi
+    if [[ "$osd_min" == "0" ]] && is_correct_link "$CONFIG_HOME/swayosd/config.toml" "$REPO/swayosd/config.toml"; then
+        row OK "brightness floor" "min_brightness=0; the Fn key reaches a black screen, 5% restored on wake"
+    elif [[ -n "$osd_min" ]]; then
+        row WARN "brightness floor" "min_brightness=${osd_min}% is in effect; the Fn key cannot reach 0 -- rerun ./install.sh"
+    else
+        row WARN "brightness floor" "no min_brightness set anywhere; SwayOSD falls back to its built-in default"
+    fi
+
+    # The reset that makes a 0 floor safe to have. Without it, suspending at 0
+    # wakes to a black panel.
+    if [[ ! -x "$REPO/hypr/scripts/display/brightness-floor.sh" ]] \
+        || ! grep -q 'brightness-floor\.sh' "$REPO/hypr/hypridle.conf"; then
+        row WARN "brightness reset on wake" "not wired; suspending at 0 brightness would wake to a black screen"
+    elif ! pgrep -x hypridle >/dev/null; then
+        # The wiring is inert without the daemon. autostart.lua starts it, so a
+        # dead hypridle also means no screen lock and no idle suspend at all.
+        row WARN "brightness reset on wake" "wired, but hypridle is NOT running; no resume hook, no lock, no idle suspend"
+    else
+        row OK "brightness reset on wake" "hypridle after_sleep_cmd + 300s on-resume -> brightness-floor.sh"
     fi
 
     # ── Runtime directories ─────────────────────────────────────────────────
