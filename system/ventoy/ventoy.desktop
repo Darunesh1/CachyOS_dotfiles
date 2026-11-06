@@ -1,0 +1,19 @@
+# Template. install.sh replaces the repo-path placeholder on the Exec line
+# and writes the result to ~/.local/share/applications/ventoy.desktop.
+#
+# The basename is deliberately `ventoy.desktop`, matching the one ventoy-bin
+# installs. XDG_DATA_DIRS puts ~/.local/share FIRST, so this file SHADOWS
+# /usr/share/applications/ventoy.desktop and rofi drun shows one Ventoy row
+# instead of two. Renaming it would leave the broken `Exec=ventoygui` entry
+# visible alongside this one.
+[Desktop Entry]
+Type=Application
+Name=Ventoy
+GenericName=Bootable USB writer
+Comment=Write a multi-boot USB stick (web UI; the GTK GUI cannot run as root on Wayland)
+Icon=ventoy
+Exec=kitty --class ventoy-web --hold __REPO__/system/ventoy/ventoy-web.sh
+Terminal=false
+Categories=System;Filesystem;
+Keywords=usb;iso;boot;bootable;ventoy;
+StartupNotify=true

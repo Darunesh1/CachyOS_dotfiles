@@ -104,3 +104,16 @@ hl.window_rule({
     size   = "1200 760",
     center = true,
 })
+
+-- Ventoy's web server terminal. The class comes from `kitty --class ventoy-web`
+-- in system/ventoy/ventoy.desktop, not from kitty's own app id, so this rule
+-- does not catch ordinary kitty windows. It is a log window plus a Ctrl+C
+-- target, so it floats small rather than taking a tile.
+hl.window_rule({
+    name  = "float-ventoy-web",
+    match = { class = "^(ventoy-web)$" },
+
+    float  = true,
+    size   = "900 520",
+    center = true,
+})

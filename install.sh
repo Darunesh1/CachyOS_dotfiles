@@ -462,6 +462,39 @@ stage_symlinks() {
         ok "~/.config/Thunar/uca.xml -> repo (Open Terminal Here)"
     fi
 
+    # Ventoy's own launcher is broken on Wayland and this replaces it.
+    #
+    # /usr/share/applications/ventoy.desktop runs `ventoygui`, which re-execs
+    # itself under pkexec so the GTK3 frontend runs as root. pkexec forwards
+    # only DISPLAY, LANG, PATH and XAUTHORITY; XAUTHORITY is unset here, there
+    # is no ~/.Xauthority, and xhost authorises exactly one entry,
+    # SI:localuser:$USER. root therefore cannot open the display and the window
+    # never appears -- /var/log/ventoy.log is not even created.
+    #
+    # Our entry runs ventoyweb instead, whose privileged half (V2DServer) is
+    # headless, so pkexec is fine for it. Same basename as the packaged file on
+    # purpose: XDG_DATA_DIRS puts ~/.local/share first, so this one shadows it
+    # and rofi shows a single Ventoy row.
+    #
+    # Generated, not symlinked, because Exec= needs the absolute repo path
+    # baked in -- the same reason write_restore_script generates its file.
+    local apps_dir="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+    local ventoy_entry="$apps_dir/ventoy.desktop"
+    if ! pacman -Qq ventoy-bin >/dev/null 2>&1; then
+        warn "ventoy-bin is not installed; skipping the Ventoy launcher."
+    else
+        run mkdir -p "$apps_dir"
+        if [[ -e "$ventoy_entry" ]] && ! grep -q 'ventoy-web\.sh' "$ventoy_entry" 2>/dev/null; then
+            backup_item "$ventoy_entry"
+        fi
+        run chmod +x "$REPO/system/ventoy/ventoy-web.sh"
+        if run_sh "sed 's|__REPO__|$REPO|g' '$REPO/system/ventoy/ventoy.desktop' > '$ventoy_entry'"; then
+            ok "~/.local/share/applications/ventoy.desktop -> web UI (ventoygui cannot run as root on Wayland)"
+        else
+            err "failed to write $ventoy_entry"
+        fi
+    fi
+
     # swayosd is NOT a symlink. There is no swayosd/ directory in this repo --
     # the folder exists only to hold the style.css wallust writes into it. The
     # old README told you to symlink it, which silently broke the theming.
@@ -1536,6 +1569,26 @@ BINARIES
         row MISSING "~/.config/Thunar/uca.xml" "not a link into the repo; Open Terminal Here may still call exo-open"
     else
         row MISSING "~/.config/Thunar/uca.xml" "absent; Thunar has no Open Terminal Here"
+    fi
+
+    # Existence proves nothing: a stale Exec= path or a missing ventoyweb both
+    # fail silently from rofi, so check the whole chain. The packaged entry runs
+    # ventoygui, which cannot open a root window on Wayland (see stage 4).
+    local ventoy_entry="${XDG_DATA_HOME:-$HOME/.local/share}/applications/ventoy.desktop"
+    local ventoy_exec
+    if ! pacman -Qq ventoy-bin >/dev/null 2>&1; then
+        row MISSING "ventoy launcher" "ventoy-bin not installed"
+    elif [[ ! -f "$ventoy_entry" ]]; then
+        row WARN "ventoy launcher" "no override; rofi runs the packaged ventoygui, which dies as root on Wayland"
+    elif ! command -v ventoyweb >/dev/null; then
+        row WARN "ventoy launcher" "ventoyweb missing from PATH; reinstall ventoy-bin"
+    else
+        ventoy_exec=$(sed -n 's/^Exec=kitty .*--hold \(.*\)$/\1/p' "$ventoy_entry")
+        if [[ -n "$ventoy_exec" && -x "$ventoy_exec" ]]; then
+            row OK "ventoy launcher" "web UI on 127.0.0.1:24680; the GTK GUI cannot open a root window on Wayland"
+        else
+            row WARN "ventoy launcher" "Exec= points at '${ventoy_exec:-?}', which is not executable; rerun ./install.sh"
+        fi
     fi
 
     # This one must NOT be a symlink -- see stage 4.
