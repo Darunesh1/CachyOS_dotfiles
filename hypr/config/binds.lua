@@ -81,7 +81,18 @@ hl.bind("CTRL + ALT + Delete", hl.dsp.exec_cmd(L.scripts .. "/power/power-menu.s
 
 -- ── Reload Controls ─────────────────────────────────────────────────────────
 hl.bind(mainMod .. " + R", hl.dsp.exec_cmd(L.config .. "/waybar/scripts/launch.sh")) -- Reload Waybar
-hl.bind(mainMod .. " + SHIFT + R", hl.dsp.exec_cmd("hyprctl reload"))               -- Reload Hyprland
+-- `locked = true` is the point of this one, not a detail. A reload is the only
+-- rescue that works with no picture on the screen, and the case that needs it
+-- most -- a resume that comes back black -- always has hyprlock up. Without
+-- `locked`, Hyprland drops the key while the session is locked, so the rescue
+-- was unavailable in exactly the situation it exists for, and a reboot was the
+-- only way out. Measured: the brightness and media keys below already carry
+-- `locked = true`; this one did not.
+--
+-- Safe to allow while locked: it re-reads the config and relights outputs. It
+-- cannot unlock the session or reveal anything -- hyprlock keeps its surface
+-- across a reload.
+hl.bind(mainMod .. " + SHIFT + R", hl.dsp.exec_cmd("hyprctl reload"), { locked = true }) -- Reload Hyprland (works at the lock screen)
 
 
 -- ── Screenshots ─────────────────────────────────────────────────────────────

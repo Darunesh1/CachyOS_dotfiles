@@ -12,6 +12,12 @@
 local L = require("config/lib")
 
 hl.on("hyprland.start", function()
+    -- FIRST, before anything else can muddy the picture: keep the previous
+    -- session's hyprland.log. It lives in /run/user/$UID/hypr/, which is tmpfs
+    -- and dies with the boot, so every reboot after a black-screen resume
+    -- destroyed the only evidence of what happened.
+    hl.exec_cmd(L.scripts .. "/display/save-prev-log.sh")
+
     -- Core services
     hl.exec_cmd("waybar")
     hl.exec_cmd("swaync")
