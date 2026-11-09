@@ -165,95 +165,173 @@ The working form is `hyprctl dispatch 'hl.dsp.dpms("on")'`, which returns `ok`.
 The two commands are joined with `;` rather than `&&` for the same reason: a
 failing dpms call must not be able to skip the brightness restore.
 
-## When the screen comes back black after a resume
+## When the screen comes back black after a resume -- solved
 
-Symptom: you wake the laptop, the picture appears for about a second, then the
-screen goes black and stays black. **The machine is not dead.** PAM proves the
-session survives and that the keyboard still reaches hyprlock -- these are real
-authentication attempts logged *after* a wake, typed at a screen showing
-nothing:
+Symptom: wake the laptop, the picture appears for about a second, then black,
+and nothing recovers it. The power button was the only way out, which destroys
+unsaved work. **Pressing it was the correct response to a dead session, not a
+mistake.** Three separate faults stacked up.
+
+### 1. The resume command was turning the screen off
+
+`hypridle.conf`'s `after_sleep_cmd` ran `hyprctl dispatch 'hl.dsp.dpms("on")'`
+from 2026-11-07 (`e75ea32`) to 2026-11-09. On this build the **positional
+string form switches the display off**, whatever string you pass. Measured from
+a panel that was on:
 
 ```
-resume 10:01:34 -> auth failures 10:01:44, 10:01:51, 10:01:58
-10:02:00 pam_faillock: User darriour is temporarily locked out
-         due to 3 consecutive failed login attempts
+hyprctl dispatch 'hl.dsp.dpms({action = "on"})'   -> dpmsStatus true   (correct)
+hyprctl dispatch 'hl.dsp.dpms({action = "off"})'  -> dpmsStatus false  (correct)
+hyprctl dispatch 'hl.dsp.dpms("on")'              -> dpmsStatus FALSE  (!!)
 ```
 
-**The root cause is not yet known.** What has been ruled out, each by
-measurement rather than reasoning:
+Reproduced twice from `true`. So every resume ran a command that blanked the
+panel: the one-second picture was the compositor restoring the output, and the
+black was this line undoing it.
 
-| suspected | ruled out by |
-|---|---|
-| backlight at 0 | `systemd-backlight` saved `4800` of `96000` at that shutdown -- 5%, not 0 |
-| the broken `dpms on` | a resume before that fix worked fine and ran 9 more hours |
-| `monitors.lua` disabling eDP-1 | `config/display-mode.lua` holds `mirror = "eDP-1", disabled = false`, and that file cannot represent "external only" |
-| suspending again on wake | the 24 s between resume and reboot holds only `tailscaled` and `NetworkManager` lines |
-| a missing lock-screen wallpaper | `~/Pictures/Wallpaper/current_wallpaper` is a valid 1920x1080 JPEG |
+**`ok` from `hyprctl dispatch` is worthless as evidence.** `hl.dsp.dpms()` with
+no arguments and `hl.dsp.dpms("bogus")` both print `ok`. That is what the
+earlier commit relied on, and it proved nothing. The only valid check is reading
+`dpmsStatus` back out of `hyprctl monitors -j`. The form before it,
+`hyprctl dispatch dpms on`, errored under the Lua config plugin
+(`')' expected near 'on'`, exit 7) and did nothing — which is why resumes
+worked *before* that commit.
 
-### Three traps that turned this into a reboot
+Both upstream hypridle and HyDE use the table form. `install.sh --check` now
+has a `resume dpms form` row so this cannot regress silently.
 
-**`pam_faillock` locks you out.** Arch's defaults are `deny = 3`,
-`unlock_time = 600`. Three wrong tries and the **correct** password is refused
-for ten minutes. Typing blind reaches three fast, and at that point rebooting
-really is the quickest way back in. Check with `faillock --user $USER`; clear
-it with `faillock --user $USER --reset`.
+### 2. Two lock screens raced on every lid close
 
-**The rescue keybind did not work while locked.** `SUPER + SHIFT + R` runs
-`hyprctl reload`, which is the one recovery that works with no picture -- but it
-carried no `locked = true`, so Hyprland dropped the key whenever hyprlock was
-up, which is always the case after a resume. It now has it, confirmed from
-Hyprland's own state (`hyprctl binds -j` reports `modmask: 65, key: R,
-locked: True`).
+`scripts/display/lid-close.sh` used to end:
 
-**Brightness keys work at the lock screen, and now reach 0.** Lines 194-195 of
-`config/binds.lua` carry `locked = true`, and `min_brightness = 0` makes two
-presses of brightness-down switch the backlight off entirely. Poking at keys in
-front of a black screen can therefore make a dim screen into a truly dark one.
-`brightnessctl set 20%` from a TTY undoes it.
+```sh
+pidof hyprlock >/dev/null || hyprlock &
+systemctl suspend
+```
 
-### What to do instead of rebooting
+The `&` backgrounds the **whole `||` list**, so the script never waited — it
+called `systemctl suspend` at once, logind ran hypridle's
+`before_sleep_cmd = loginctl lock-session`, and that started a *second*
+hyprlock. Both `pidof` guards checked inside the same second, before either
+process was visible to the other. hyprlock said so itself, three times:
 
-1. `SUPER + SHIFT + R` -- reloads Hyprland and relights the outputs. Works
-   blind and works locked.
-2. `Ctrl + Alt + F2`, log in on the TTY, then `loginctl unlock-session`, or
-   `pkill hyprlock` if that does not take. This always works.
-3. Before you reboot, collect the four things that answer it:
-   `~/.local/state/hypr/hyprland-prev.log`,
-   `~/.local/state/hypr/hyprlock.log`, `hyprctl monitors all -j`, and
+```
+onLockFinished called. Seems we got yeeten. Is another lockscreen running?
+```
+
+and the journal showed its twin dying mid-auth beside every `Lid closed.`:
+
+```
+hyprlock[29809]: pam_unix(hyprlock:auth): conversation failed
+```
+
+That line is gone. hypridle's `lock_cmd` is the only thing that starts hyprlock
+now, matching upstream and the JaKooLit and HyDE dotfiles — not one of them
+locks from a lid script.
+
+### 3. A dead lock screen could never be replaced
+
+`misc:allow_session_lock_restore` defaults to **false**, and was unset here.
+Once hyprlock died or lost its surface, Hyprland refused to let a replacement
+attach, so the session sat locked with nothing drawing while still swallowing
+every keystroke — which is why PAM logged real password attempts at a screen
+showing nothing. `config/appearance.lua` now sets it `true`, and
+`SUPER + SHIFT + L` (bound with `locked = true`) runs
+`pkill -x hyprlock ; sleep 0.3 ; hyprlock` to put a working lock screen back.
+
+### The idle staircase was also wrong
+
+The old file had two listeners: lock at 300 s, **suspend at 330 s**. No
+screen-off step at all, so the machine went from locked straight to full
+suspend in 5.5 minutes — every coffee break was a suspend, and every suspend
+risked the faults above. Compared when it was rewritten:
+
+| stage | hypridle upstream | JaKooLit | HyDE | was here | now |
+|---|---|---|---|---|---|
+| dim backlight | 150 s | — | 60 s | absent | 150 s |
+| lock | 300 s | 600 s | 120 s | 300 s | 300 s |
+| **DPMS off** | 330 s | 630 s (commented) | 300 s | **absent** | 330 s |
+| **suspend** | 1800 s | 1200 s (commented) | 500 s | **330 s** | 1800 s |
+
+### What was investigated and deliberately left alone
+
+- **`inhibit_sleep`.** HyDE forces `3` to dodge a lock/suspend race, which
+  looked like ours. From hypridle's `src/core/Hypridle.cpp`, the default `2`
+  (auto) resolves to `SLEEP_INHIBIT_LOCK_NOTIFY` when the compositor advertises
+  the lock notifier **and** `lock_cmd` contains `hyprlock` while
+  `before_sleep_cmd` contains `lock-session` — all true here, and
+  `hyprland_lock_notifier_v1` is advertised. The running daemon confirms it:
+  `Sleep inhibition enabled - inhibiting until the wayland session gets locked`.
+  Changing it would do nothing.
+- **`HandleLidSwitch=suspend` and `HandlePowerKey=poweroff`**, both live logind
+  defaults, so the lid is handled twice. Both need `sudo` and change hardware
+  behaviour; fixing the three faults above addresses the failure, and a second
+  behaviour change at the same time would make it impossible to tell which one
+  worked.
+
+### Six `hyprlock.conf` options were being discarded
+
+Every lock logged:
+
+```
+line 8:  general:no_fade_in          line 10: general:grace
+line 9:  general:no_fade_out         line 11: general:disable_loading
+line 58: input-field:fail_transition line 61: input-field:capslock_nb_text
+Proceeding ignoring faulty entries
+```
+
+hyprlock 0.9.7 does not have them — checked against its
+`src/config/ConfigManager.cpp`, where `general` registers only `text_trim`,
+`hide_cursor`, `ignore_empty_input`, `immediate_render`, `compositor_fade`,
+`fractional_scaling`, `screencopy_mode`, `fail_timeout` and
+`disable_screencopy`. All six removed, and `immediate_render = true` added so
+the lock screen draws at once. `fail_transition` was dropped rather than
+translated to `fail_timeout`, which is a `general` option with different
+meaning — guessing a value would not be better than leaving it at its default.
+
+### If it ever happens again
+
+1. `SUPER + SHIFT + L` — replaces the lock screen. Works blind and works
+   locked. This is what replaces the power button.
+2. `SUPER + SHIFT + R` — reloads Hyprland and relights outputs. Also `locked`.
+3. `Ctrl + Alt + F2`, log in, then `loginctl unlock-session`, or
+   `pkill hyprlock`. Always works.
+4. Before rebooting, collect `~/.local/state/hypr/hyprland-prev.log`,
+   `~/.local/state/hypr/hyprlock.log`, `hyprctl monitors all -j` and
    `cat /sys/class/backlight/intel_backlight/brightness`.
 
-### Why the logs were useless until now
+Also note `pam_faillock`'s Arch defaults (`deny = 3`, `unlock_time = 600`):
+three blind mistypes refuse the **correct** password for ten minutes.
+`faillock --user $USER --reset` clears it.
 
-Hyprland and hyprlock write to `/run/user/$UID/hypr/<instance>/hyprland.log`,
-which is tmpfs and dies with the boot -- so every reboot after a black screen
-destroyed the only record of it. Two things now keep that evidence:
+### Why the logs were useless at first, and the bug in the fix
 
-- `scripts/display/save-prev-log.sh`, run first from `config/autostart.lua`,
-  copies the previous session's log to `~/.local/state/hypr/hyprland-prev.log`.
-  One copy, not a rotation (the log reached 1.9 MB in 30 minutes).
-- `hypridle.conf`'s `lock_cmd` now redirects hyprlock's stderr to
-  `~/.local/state/hypr/hyprlock.log`. It previously went nowhere, so a lock
-  screen that drew once and then stopped rendering left no trace. The `pidof`
-  guard is kept and wrapped in braces: two hyprlock instances fighting over the
-  single session-lock surface is itself a way to get a black screen, and a bare
-  `||` would have run hyprlock unconditionally and broken locking outright if
-  the state directory were missing.
+Hyprland writes to `/run/user/$UID/hypr/<instance>/hyprland.log`, which is
+tmpfs and dies with the boot, so rebooting away the symptom destroyed the only
+record. `scripts/display/save-prev-log.sh` keeps one copy at
+`~/.local/state/hypr/hyprland-prev.log`, and `hypridle.conf`'s `lock_cmd`
+redirects hyprlock's stderr to `~/.local/state/hypr/hyprlock.log` — that
+redirect is what finally caught the `yeeten` line and the config errors.
+
+The first version of `save-prev-log.sh` (`059b809`) **did not work**: it took
+the newest log by mtime at `hyprland.start`, when the session just *starting*
+already owns the newest log. Twelve consecutive saves of ~19,455 bytes, every
+one ending in `Starting the Aquamarine backend!`. It now excludes
+`$HYPRLAND_INSTANCE_SIGNATURE` and refuses any candidate under 32 KB, since
+that size is the signature of the bug.
 
 ### The resume-time panel rescue
 
 `config/monitors.lua` has a good rescue (`rescue_panel`, with a three-strike
-guard against reload loops), but it is registered only on `monitor.removed` and
-`config.reloaded`. **A wake from suspend fires neither**, and Hyprland exposes
-no resume event to Lua, so a resume that comes back dark had nothing to recover
-it. `scripts/display/panel-rescue.sh` closes that gap, called as the third
-command of `hypridle.conf`'s `after_sleep_cmd`. It counts lit outputs the same
-way `lit_screens()` does -- `hyprctl monitors -j` lists only enabled,
-non-mirroring outputs, with `FALLBACK` excluded by name -- and reloads only when
-that count is zero.
+guard against reload loops), registered only on `monitor.removed` and
+`config.reloaded`. A wake from suspend fires neither, and Hyprland exposes no
+resume event to Lua, so `scripts/display/panel-rescue.sh` is called as the
+third command of `after_sleep_cmd`. It counts lit outputs the same way
+`lit_screens()` does — `hyprctl monitors -j` lists only enabled, non-mirroring
+outputs, `FALLBACK` excluded by name — and reloads only when that count is
+zero. It cannot help a black screen whose output Hyprland still believes is
+enabled; that case was fault 1 above.
 
-Its limit, stated plainly: it cannot help a black screen whose output Hyprland
-still believes is enabled. In that case the count is 1 and it exits. That case
-is what the logs above are for.
 
 ### External displays
 

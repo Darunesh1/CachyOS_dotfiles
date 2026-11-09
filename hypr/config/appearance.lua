@@ -79,5 +79,19 @@ hl.config({
         -- window you cycle to, so cycling swaps windows without ever leaving
         -- fullscreen. Applies to every focus change, arrow keys included.
         on_focus_under_fullscreen = 1,
+
+        -- Lets a NEW lock screen take over a session whose old one died.
+        --
+        -- The stock value is false, and that is what turned a one-second
+        -- glitch into a machine escapable only by the power button: once
+        -- hyprlock lost its surface or exited, Hyprland refused to let any
+        -- replacement attach, so the session stayed locked with nothing
+        -- drawing and nothing able to accept the password. From inside the
+        -- session there was no way back at all.
+        --
+        -- With this true, `pkill -x hyprlock ; hyprlock` restores a working
+        -- lock screen -- which is what SUPER + SHIFT + L is bound to in
+        -- config/binds.lua, as a blind escape hatch that works while locked.
+        allow_session_lock_restore = true,
     },
 })

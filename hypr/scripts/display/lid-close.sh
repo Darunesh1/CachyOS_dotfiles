@@ -29,5 +29,32 @@ external_connected() {
 
 external_connected && exit 0
 
-pidof hyprlock >/dev/null || hyprlock &
+# This used to start hyprlock itself:
+#
+#     pidof hyprlock >/dev/null || hyprlock &
+#
+# That line was the bug behind "the screen comes back for a second, then black".
+# The `&` backgrounds the WHOLE `||` list, so the script never waited -- it
+# called `systemctl suspend` immediately, logind ran hypridle's
+# `before_sleep_cmd = loginctl lock-session`, and that started a SECOND
+# hyprlock. Both `pidof` guards checked inside the same second, before either
+# process was visible to the other, so both passed. One instance then lost the
+# session-lock surface and said so:
+#
+#     onLockFinished called. Seems we got yeeten. Is another lockscreen running?
+#
+# and the journal showed its twin dying mid-auth beside every `Lid closed.`:
+#
+#     hyprlock[29809]: pam_unix(hyprlock:auth): conversation failed
+#
+# Locking is hypridle's job alone now, through `before_sleep_cmd`, which runs
+# before EVERY suspend however it was triggered -- so nothing is lost by not
+# locking here. hypridle also holds a systemd sleep inhibitor until the session
+# reports itself locked (inhibit_sleep defaults to 2 = auto, which resolves to
+# SLEEP_INHIBIT_LOCK_NOTIFY because lock_cmd contains "hyprlock",
+# before_sleep_cmd contains "lock-session", and this compositor advertises
+# hyprland_lock_notifier_v1), so the lock is genuinely up before we sleep.
+#
+# Upstream hypridle and the JaKooLit and HyDE dotfiles all do it this way: not
+# one of them starts a locker from a lid script.
 systemctl suspend

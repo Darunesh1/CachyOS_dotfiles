@@ -1640,6 +1640,47 @@ BINARIES
         row WARN "brightness floor" "no min_brightness set anywhere; SwayOSD falls back to its built-in default"
     fi
 
+    # The three conditions behind "the screen comes back black after a resume".
+    # Asked of the running system, because the files being right says nothing
+    # if the config was never reloaded.
+    #
+    # 1. The DPMS argument form. `hl.dsp.dpms("on")` TURNS THE DISPLAY OFF on
+    #    this build -- measured -- and lived in after_sleep_cmd from e75ea32
+    #    until 059b809's successor. Only the table form is correct, and
+    #    `hyprctl dispatch` printing `ok` proves nothing either way.
+    # 2. allow_session_lock_restore, without which a dead lock screen can
+    #    never be replaced and the session is escapable only by the power key.
+    # 3. lid-close.sh starting a second hyprlock, which raced the one hypridle
+    #    starts and left one of them "yeeten".
+    local dpms_form lock_restore
+    # Only real directives, never the comments -- this file documents the bad
+    # form on purpose, so grepping the whole file flags itself.
+    dpms_form=$(grep -vE '^[[:space:]]*#' "$REPO/hypr/hypridle.conf" 2>/dev/null \
+        | grep -c "hl\.dsp\.dpms(\"" || true)
+    if (( dpms_form > 0 )); then
+        row WARN "resume dpms form" "hypridle.conf uses hl.dsp.dpms(\"...\"), which turns the panel OFF; use {action = \"on\"}"
+    elif grep -vE '^[[:space:]]*#' "$REPO/hypr/hypridle.conf" 2>/dev/null \
+        | grep -q 'hl\.dsp\.dpms({action = "on"})'; then
+        row OK "resume dpms form" "table form {action = \"on\"}; verified against dpmsStatus, not against 'ok'"
+    else
+        row WARN "resume dpms form" "no dpms-on in after_sleep_cmd; a resume may leave the panel dark"
+    fi
+
+    lock_restore=$(timeout 10 hyprctl getoption misc:allow_session_lock_restore 2>/dev/null | awk '/^bool:/{print $2}')
+    if [[ "$lock_restore" == "true" ]]; then
+        row OK "lock screen rescue" "allow_session_lock_restore on; SUPER+SHIFT+L replaces a dead lock"
+    elif [[ -z "$lock_restore" ]]; then
+        row SKIPPED "lock screen rescue" "Hyprland not running; cannot read allow_session_lock_restore"
+    else
+        row WARN "lock screen rescue" "allow_session_lock_restore=$lock_restore; a dead lock screen cannot be replaced -- only the power key escapes"
+    fi
+
+    if grep -qE '^[^#]*\bhyprlock\b' "$REPO/hypr/scripts/display/lid-close.sh" 2>/dev/null; then
+        row WARN "single lock owner" "lid-close.sh starts hyprlock again; it will race hypridle's and one gets yeeten"
+    else
+        row OK "single lock owner" "only hypridle's lock_cmd starts hyprlock"
+    fi
+
     # The reset that makes a 0 floor safe to have. Without it, suspending at 0
     # wakes to a black panel.
     if [[ ! -x "$REPO/hypr/scripts/display/brightness-floor.sh" ]] \

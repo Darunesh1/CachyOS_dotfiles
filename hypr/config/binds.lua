@@ -20,6 +20,26 @@ local mainMod = L.mainMod
 -- Lock screen
 hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("pidof hyprlock || hyprlock"))
 
+-- Blind escape hatch: replace a wedged lock screen without rebooting.
+--
+-- This exists because a black screen after resume used to be unrecoverable.
+-- The old failure left hyprlock dead or surface-less, and with
+-- misc:allow_session_lock_restore at its stock false, Hyprland refused to let
+-- a replacement attach -- so the session sat locked with nothing drawing, it
+-- still swallowed every keystroke, and the only way out was the power button,
+-- which destroys unsaved work. appearance.lua now sets that option true, and
+-- this is the bind that makes use of it.
+--
+-- `locked = true` is the entire point, exactly as for SUPER + SHIFT + R: the
+-- situation that needs this bind ALWAYS has hyprlock holding the session, and
+-- Hyprland drops non-locked binds while locked.
+--
+-- `;` not `&&`, so a pkill that finds nothing to kill still starts hyprlock.
+-- The sleep gives the old instance time to release the surface first.
+hl.bind(mainMod .. " + SHIFT + L",
+    hl.dsp.exec_cmd("pkill -x hyprlock ; sleep 0.3 ; hyprlock"),
+    { locked = true })                                    -- Rescue a dead lock screen
+
 -- Kill active window
 hl.bind(mainMod .. " + Q", hl.dsp.window.close())
 hl.bind("ALT + F4", hl.dsp.window.close())
