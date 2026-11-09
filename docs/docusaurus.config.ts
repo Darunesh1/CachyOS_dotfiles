@@ -9,14 +9,20 @@ const config: Config = {
 
   // Set the production url of your site here
   url: 'https://Darunesh1.github.io',
-  // Set the /<baseUrl>/ pathname under which your site is served
-  // For GitHub pages deployment, it is often '/<projectName>/'
-  baseUrl: '/MyArch/',
+  // Set the /<baseUrl>/ pathname under which your site is served.
+  //
+  // This MUST match the GitHub repository name, not the local folder name.
+  // The working directory here is ~/MyArch but the remote is
+  // github.com/Darunesh1/CachyOS_dotfiles, and GitHub Pages serves a project
+  // repo at https://<user>.github.io/<repo>/. It was '/MyArch/' until
+  // 2026-11-09, so every asset and internal link on the published site
+  // resolved to a path that does not exist.
+  baseUrl: '/CachyOS_dotfiles/',
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
   organizationName: 'Darunesh1', // Usually your GitHub org/user name.
-  projectName: 'MyArch', // Usually your repo name.
+  projectName: 'CachyOS_dotfiles', // The repo name, not the local folder name.
   deploymentBranch: 'gh-pages',
   trailingSlash: false,
 
