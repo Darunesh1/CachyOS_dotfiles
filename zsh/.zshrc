@@ -35,3 +35,16 @@ esac
 # pnpm end
 
 . "$HOME/.local/share/../bin/env"
+
+# npm's user prefix. Holds kilo, kilocode and omniroute -- installed with npm,
+# so no package owns them (`pacman -Qo` errors on all three) and no manifest in
+# packages/ can install them. Without this line those three are not on PATH.
+export PATH="$HOME/.local/npm/bin:$PATH"
+
+# There was an `export PATH=/home/darriour/.opencode/bin:$PATH` here. Removed
+# on 2026-11-09: opencode is a pacman package (opencode 2.2.5-1.1) and already
+# ships /usr/bin/opencode, so that line put a stale hand-installed 240 MB copy
+# ahead of the 252 MB one pacman keeps updated -- `command -v opencode`
+# resolved to the home copy. Two installs with PATH order picking the winner.
+# If the hand-installed build is ever wanted instead, remove the package
+# (`pacman -Rns opencode`) so there is exactly one owner.

@@ -65,6 +65,7 @@ xdg-user-dirs           # xdg-user-dir, used by zsh/conf.d/env.zsh
 firefox                 # SUPER+B
 pavucontrol             # waybar pulseaudio on-click
 nm-connection-editor    # waybar network on-click
+opencode                # AI coding agent; ships /usr/bin/opencode
 
 # ── Theming ─────────────────────────────────────────────────────────────────
 ttf-jetbrains-mono-nerd # the font every component asks for by name
