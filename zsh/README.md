@@ -159,6 +159,10 @@ has no idea which directory you are in, so having once typed `cd Projects` it
 offered it everywhere -- including inside `~/Projects`, where no such directory
 exists.
 
+> **Decision record:** [decisions/0002-drop-completion-suggest-strategy.md](../decisions/0002-drop-completion-suggest-strategy.md)
+> owns the decision, the options and the consequences. This section keeps
+> the measurements.
+
 ### The completion strategy was tried as a fallback, and removed
 
 The plugin ships a `completion` strategy which is context-aware by construction,

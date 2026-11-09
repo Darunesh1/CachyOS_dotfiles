@@ -136,6 +136,9 @@ Media and brightness keys are handled via SwayOSD, and work while the screen is 
 Closing the laptop lid locks and suspends -- unless an external display is
 plugged in, in which case nothing happens and the picture stays on it.
 
+> **Decision record:** [decisions/0004-brightness-zero-with-wake-floor.md](../decisions/0004-brightness-zero-with-wake-floor.md)
+> owns why the floor is 0 with a wake-time restore, and what it costs.
+
 **Brightness goes all the way to black.** The packaged
 `/etc/xdg/swayosd/config.toml` ships `min_brightness = 5`, which pinned the
 backlight at 4800 of 96000 on `intel_backlight`. `swayosd/config.toml` in this
@@ -166,6 +169,10 @@ The two commands are joined with `;` rather than `&&` for the same reason: a
 failing dpms call must not be able to skip the brightness restore.
 
 ## When the screen comes back black after a resume -- solved
+
+> **Decision record:** [decisions/0005-single-lock-owner-and-idle-staircase.md](../decisions/0005-single-lock-owner-and-idle-staircase.md)
+> owns the one-lock-owner choice, `allow_session_lock_restore`, the idle
+> timings, and why `HandlePowerKey` and `inhibit_sleep` were left alone.
 
 Symptom: wake the laptop, the picture appears for about a second, then black,
 and nothing recovers it. The power button was the only way out, which destroys
@@ -332,6 +339,10 @@ outputs, `FALLBACK` excluded by name — and reloads only when that count is
 zero. It cannot help a black screen whose output Hyprland still believes is
 enabled; that case was fault 1 above.
 
+
+> **Decision record:** [decisions/0006-mirror-by-default-and-panel-rescue.md](../decisions/0006-mirror-by-default-and-panel-rescue.md)
+> owns why mirroring is the default and why the rescue reloads rather than
+> evaluating `hl.monitor`.
 
 ### External displays
 

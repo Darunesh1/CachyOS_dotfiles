@@ -17,6 +17,10 @@ Both times the session disappeared to the login screen with everything open
 inside it. Four separate things lined up to make that possible, and the fourth
 is the one that makes the other fixes stick.
 
+> **Decision record:** [decisions/0001-oomd-avoid-over-omit.md](../decisions/0001-oomd-avoid-over-omit.md)
+> owns the choice of `avoid` over `omit`, the options rejected and the
+> consequences. This section keeps the mechanism and the measurements.
+
 ## 1. The swap rule was written for a disk, and this machine has no disk swap
 
 Arch ships `ManagedOOMSwap=kill` on every user slice
@@ -220,6 +224,10 @@ session.
 ---
 
 # ventoy/ — a working launcher for Ventoy
+
+> **Decision record:** [decisions/0003-ventoy-web-ui.md](../decisions/0003-ventoy-web-ui.md)
+> owns why the web UI was chosen over the GTK GUI and over
+> `xhost +SI:localuser:root`.
 
 `ventoy-bin` ships `/usr/share/applications/ventoy.desktop` with
 `Exec=ventoygui`. **That can never work on this machine**, so do not "fix" the
