@@ -112,6 +112,7 @@ emergency binds: **SUPER+Q** (terminal), **SUPER+R** (run), **SUPER+M** (exit).
 | `SUPER + SHIFT + W` | Toggle pseudotile (dwindle) |
 | `ALT + Tab` | Cycle windows in the current workspace (stays fullscreen) |
 | `SUPER + Tab` | Switch to any window on any workspace (rofi) |
+| `SUPER + O` | Workspace overview: every workspace as a card with its windows (also 3-finger swipe up) |
 | `SUPER + arrows` | Move focus |
 | `SUPER + [0-9]` | Switch workspace |
 | `SUPER + SHIFT + [0-9]` | Move window to workspace |
@@ -161,12 +162,79 @@ high -- and exits `0` when there is no backlight. **The two resume hooks only
 work while `hypridle` is running**; `autostart.lua` starts it, and
 `pgrep -x hypridle` is how to check.
 
-While wiring that up, `after_sleep_cmd = hyprctl dispatch dpms on` turned out to
-have been failing silently all along. Under the Lua config plugin it errors with
-`[string "return hl.dispatch(dpms on)"]:1: ')' expected near 'on'` and exits 7.
-The working form is `hyprctl dispatch 'hl.dsp.dpms("on")'`, which returns `ok`.
-The two commands are joined with `;` rather than `&&` for the same reason: a
-failing dpms call must not be able to skip the brightness restore.
+The DPMS argument form in `after_sleep_cmd` is a trap, and an earlier version of
+this paragraph recommended the wrong one. `hl.dsp.dpms("on")` (positional string)
+**turns the display off**, whatever string is passed; only the table form
+`hl.dsp.dpms({ action = "on" })` is correct. Measured from `dpmsStatus`, and
+`hyprctl dispatch` printing `ok` proves nothing either way. Full evidence in
+"When the screen comes back black after a resume" below. The three commands are
+joined with `;` rather than `&&` so a failing dpms call cannot skip the
+brightness restore.
+
+## Workspace overview
+
+> **Decision record:** [decisions/0007-workspace-overview-in-quickshell.md](../decisions/0007-workspace-overview-in-quickshell.md)
+> owns why this is a Quickshell client and not a Hyprland plugin, and the options
+> rejected.
+
+Swipe **up with three fingers** (or press `SUPER + O`) and the desktop dims and
+blurs behind a row of cards, one per workspace, each showing that workspace's
+windows as pictures placed where the real windows sit.
+
+| Do | Result |
+|---|---|
+| scroll or swipe sideways | move along the row; a card peeking in from the edge means there are more |
+| click a card, or a window on it | go to that workspace and close |
+| drag a window onto another card | move that window there; you stay where you are |
+| drop on the `+` card | move it to a new workspace |
+| `Esc`, click the background, 3-finger swipe down | close |
+| `Left` / `Right` | scroll by one card |
+
+It is a separate process, started when you open it and gone when you close it, so
+it uses no memory at rest. Measured while open: **161 MiB resident, 140 MiB
+proportional**. If it ever misbehaves, killing it is harmless; it cannot take the
+session down, which is the whole reason it is not a compositor plugin. Verified:
+`kill -9` while open left Hyprland on the same PID with every window intact.
+
+| File | Does |
+|---|---|
+| `quickshell/overview/shell.qml` | the overview itself, about 300 lines |
+| `scripts/overview/toggle.sh` | `open`, `close` or `toggle`; `-n` stops a second overlay stacking |
+| `config/input.lua` | `hl.gesture` for three fingers up (open) and down (close) |
+| `config/rules.lua` | `overview-blur`, a layer rule keyed on the `qs-overview` namespace |
+| `config/binds.lua` | `SUPER + O`, the way in without a touchpad |
+
+The three-finger swipe **up** is a different direction from the existing
+three-finger **horizontal** workspace swipe, so the two should coexist. That has
+not been confirmed on the touchpad; see the open `verify` issue.
+
+### Traps, because they cost real time
+
+- **Quickshell's Hyprland module cannot be trusted for workspace identity on
+  0.57.** Measured on Hyprland 0.57.2 with Quickshell 0.3.2: `HyprlandWorkspace.id`
+  is `-1` for every workspace, including the focused one, and so is every
+  window's workspace id. Names are right, ids are not. The overview reads layout
+  from `hyprctl clients -j`, `workspaces -j` and `monitors -j` instead, and uses
+  Quickshell only for `ScreencopyView`, the live window pictures.
+- **Addresses differ in form.** `hyprctl` prints `0x55ae1ba38e50`;
+  `HyprlandToplevel.address` is `55ae1ba38e50`. Strip the `0x` before comparing.
+- **A window move follows the window.** `hl.dsp.window.move({ workspace = 5,
+  window = "address:..." })` took the focus from workspace 1 to 5. Pass
+  `follow = false` for the silent move. Read from `hlWindowMove` in Hyprland's
+  source and confirmed by read-back.
+- **`ScreencopyView.captureFrame()` fails if called at once** with `Cannot capture
+  frame, as no recording context is ready`. The overview retries every 120 ms until
+  a picture arrives, capped at 25 tries.
+- **`pkill -f` matches its own shell.** While testing this, `pkill -f "class
+  qs-test"` killed the very command line running it. Match on the process name, or
+  close the window through Hyprland.
+
+### Native overview coming
+
+Hyprland is building its own: PR
+[#15898](https://github.com/hyprwm/Hyprland/pull/15898), open, not in 0.57.2.
+When it ships, repoint the two `hl.gesture` entries in `config/input.lua` and
+retire this directory; nothing else depends on it.
 
 ## When the screen comes back black after a resume -- solved
 

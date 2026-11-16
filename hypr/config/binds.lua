@@ -159,6 +159,11 @@ end)
 -- every window on every workspace, with the workspace it lives on.
 hl.bind(mainMod .. " + Tab", hl.dsp.exec_cmd(L.scripts .. "/rofi/window-switcher.sh"))
 
+-- Workspace overview: every workspace as a card with its windows (the same thing
+-- the 3-finger swipe up opens, see config/input.lua). This is the way in without
+-- a touchpad. SUPER + Tab stays the flat list above; this is the picture view.
+hl.bind(mainMod .. " + O", hl.dsp.exec_cmd(L.scripts .. "/overview/toggle.sh"))
+
 
 -- ── Laptop Lid Switch ───────────────────────────────────────────────────────
 -- Lock and suspend when the lid is closed -- unless a display is plugged in

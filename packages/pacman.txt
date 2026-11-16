@@ -66,6 +66,7 @@ firefox                 # SUPER+B
 pavucontrol             # waybar pulseaudio on-click
 nm-connection-editor    # waybar network on-click
 opencode                # AI coding agent; ships /usr/bin/opencode
+quickshell              # runs quickshell/overview, the 3-finger-swipe workspace overview
 
 # ── Theming ─────────────────────────────────────────────────────────────────
 ttf-jetbrains-mono-nerd # the font every component asks for by name

@@ -530,6 +530,21 @@ stage_symlinks() {
         ok "~/.config/swayosd/config.toml -> repo (brightness floor 0, not 5%)"
     fi
 
+    # The workspace overview. Quickshell finds configs as named directories under
+    # ~/.config/quickshell/, so the directory is linked, not the file. Only the
+    # `overview` entry is linked, never ~/.config/quickshell itself, so anything
+    # else you put there stays yours.
+    run mkdir -p "$CONFIG_HOME/quickshell"
+    if is_correct_link "$CONFIG_HOME/quickshell/overview" "$REPO/quickshell/overview"; then
+        ok "~/.config/quickshell/overview already linked"
+    else
+        [[ -e "$CONFIG_HOME/quickshell/overview" && ! -L "$CONFIG_HOME/quickshell/overview" ]] \
+            && backup_item "$CONFIG_HOME/quickshell/overview"
+        run ln -sfn "$REPO/quickshell/overview" "$CONFIG_HOME/quickshell/overview"
+        write_restore_script
+        ok "~/.config/quickshell/overview -> repo (3-finger swipe up)"
+    fi
+
     # Directories the scripts write into. awww-cycle.sh spins on an empty shuf
     # without the wallpaper dir; the screenshot binds and screen-record.sh
     # would fail on the other two.
@@ -1638,6 +1653,28 @@ BINARIES
         row WARN "brightness floor" "min_brightness=${osd_min}% is in effect; the Fn key cannot reach 0 -- rerun ./install.sh"
     else
         row WARN "brightness floor" "no min_brightness set anywhere; SwayOSD falls back to its built-in default"
+    fi
+
+    # The workspace overview is a chain, and any broken link makes the 3-finger
+    # swipe silently do nothing: the quickshell binary, the config link, the
+    # script the gesture calls, and the gesture itself. Test each, because a
+    # present-but-unlinked config looks identical to a working one until you swipe.
+    local ov_why=""
+    if ! command -v qs >/dev/null; then
+        ov_why="quickshell not installed (sudo pacman -S quickshell)"
+    elif ! is_correct_link "$CONFIG_HOME/quickshell/overview" "$REPO/quickshell/overview"; then
+        ov_why="~/.config/quickshell/overview is not linked into the repo; rerun ./install.sh"
+    elif [[ ! -f "$REPO/quickshell/overview/shell.qml" ]]; then
+        ov_why="quickshell/overview/shell.qml is missing"
+    elif [[ ! -x "$REPO/hypr/scripts/overview/toggle.sh" ]]; then
+        ov_why="hypr/scripts/overview/toggle.sh is missing or not executable"
+    elif ! grep -vE '^[[:space:]]*--' "$REPO/hypr/config/input.lua" 2>/dev/null | grep -q 'direction[[:space:]]*=[[:space:]]*"up"'; then
+        ov_why="no 3-finger swipe-up gesture in hypr/config/input.lua"
+    fi
+    if [[ -z "$ov_why" ]]; then
+        row OK "workspace overview" "3-finger swipe up / SUPER+O; separate quickshell process, cannot take the session down"
+    else
+        row WARN "workspace overview" "$ov_why"
     fi
 
     # The three conditions behind "the screen comes back black after a resume".

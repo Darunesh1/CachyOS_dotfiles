@@ -48,3 +48,4 @@ argument into the ADR and leave a link behind.
 | 0004 | Let the brightness key reach zero, restore a floor on wake | [0004-brightness-zero-with-wake-floor.md](0004-brightness-zero-with-wake-floor.md) |
 | 0005 | One lock owner, a replaceable lock, and an upstream idle staircase | [0005-single-lock-owner-and-idle-staircase.md](0005-single-lock-owner-and-idle-staircase.md) |
 | 0006 | External displays mirror by default; rescue the panel by reloading | [0006-mirror-by-default-and-panel-rescue.md](0006-mirror-by-default-and-panel-rescue.md) |
+| 0007 | Build the workspace overview as a Quickshell client, not a Hyprland plugin | [0007-workspace-overview-in-quickshell.md](0007-workspace-overview-in-quickshell.md) |

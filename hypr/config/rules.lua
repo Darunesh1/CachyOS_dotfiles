@@ -117,3 +117,14 @@ hl.window_rule({
     size   = "900 520",
     center = true,
 })
+
+-- Workspace overview (quickshell/overview). Its scrim is deliberately
+-- translucent so the desktop shows through; without blur that reads as a busy,
+-- hard-to-read mess (measured: page text from Firefox bled through the
+-- workspace labels). Keyed on the layer-shell namespace the QML sets.
+hl.layer_rule({
+    name         = "overview-blur",
+    match        = { namespace = "^qs-overview$" },
+    blur         = true,
+    ignore_alpha = 0.2,
+})
