@@ -27,7 +27,38 @@ is_open() {
 # qs prints its own INFO lines ("Launching config", "Killed <id>"). Nothing reads
 # them when this runs from a gesture or a keybind, so they are dropped.
 launch() { qs -c "$CFG" -d -n >/dev/null 2>&1; }
-shut()   { qs kill -c "$CFG" >/dev/null 2>&1; }
+
+# Closing asks the overview to close ITSELF, so it plays its exit animation (it
+# sinks back down the way it rose). Killing it would just make it vanish.
+#
+# A hung overview holding the keyboard must ALWAYS be possible to get rid of, and
+# the polite routes do not work on a wedged process, which is what this guards:
+#
+#   * `timeout 1` alone only sends SIGTERM and then waits, and a stopped or hung
+#     process never answers it. Measured: with the overview frozen (SIGSTOP) the
+#     first version of this took 31 SECONDS and left it alive.
+#   * `qs kill` is also a polite signal, so it cannot kill a stopped process.
+#
+# So: ask over IPC with a hard time limit (`-k` follows SIGTERM with SIGKILL), give
+# the animation time to finish, and if the process is still there, SIGKILL it by pid.
+shut() {
+    local pid i
+    pid=$(qs list -c "$CFG" -j 2>/dev/null | jq -r '.[0].pid // empty')
+    [[ -n "$pid" ]] || return 0
+
+    if timeout -k 0.3 1 qs ipc -c "$CFG" call overview close >/dev/null 2>&1; then
+        for i in 1 2 3 4 5 6 7 8; do
+            sleep 0.1
+            kill -0 "$pid" 2>/dev/null || return 0
+        done
+    fi
+
+    # It did not answer, or did not leave. Escalate.
+    kill -TERM "$pid" 2>/dev/null
+    sleep 0.3
+    kill -KILL "$pid" 2>/dev/null
+    return 0
+}
 
 case "${1:-toggle}" in
     open)   is_open || launch ;;

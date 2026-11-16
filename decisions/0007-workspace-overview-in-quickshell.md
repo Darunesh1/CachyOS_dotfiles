@@ -100,6 +100,32 @@ hypr/scripts/overview/toggle.sh toggle     # opens it; again closes it
 qs list -c overview -j | jq length         # 1 while open, 0 after
 ```
 
+## Update, 2026-11-16: it became a glass cube
+
+This does not change the decision (a Quickshell client, not a plugin); it records what
+building the motion taught. The first version was a flat scrolling row that jumped
+and appeared suddenly. It is now a closed prism of glass faces that rises from the
+bottom of the screen, turns on a spring, and unfolds into a flat row while a window is
+dragged. Full design, measurements and traps are in
+[../hypr/README.md](../hypr/README.md).
+
+Consequences worth keeping here because they bear on the decision:
+
+* The separate-process choice was **vindicated twice** in one afternoon. A depth-range
+  bug clipped every side face to a sliver, and an alpha-buffer bug leaked the desktop
+  through the overlay. Both were found, diagnosed and fixed by killing and relaunching
+  the overlay, with the session untouched. In a compositor plugin either would have been
+  a crash-and-lose-everything iteration loop.
+* Final measurements on the 8 GB Intel-iGPU laptop: first motion 196 ms after launch;
+  0 percent CPU at rest and no frames drawn while idle; 17 percent CPU while a scroll
+  runs (14-15 percent is the floor for animating any full-screen layer at 60 fps); RSS
+  171-186 MiB while open; the overview's own render work is about 0 ms per frame.
+* The wallpaper is painted by the overlay, not blurred by the compositor, so no
+  full-screen blur pass runs per frame and no window text bleeds through.
+* Bad, because the overlay must be an **opaque window from creation**, so it cannot
+  crossfade itself and relies on Hyprland's own `layersIn` / `layersOut` fade. Changing
+  those in `config/animations.lua` changes how the overview appears and disappears.
+
 ## More Information
 
 [../hypr/README.md](../hypr/README.md) documents usage. Sources: PR

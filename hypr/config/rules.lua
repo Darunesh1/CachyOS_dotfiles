@@ -118,13 +118,9 @@ hl.window_rule({
     center = true,
 })
 
--- Workspace overview (quickshell/overview). Its scrim is deliberately
--- translucent so the desktop shows through; without blur that reads as a busy,
--- hard-to-read mess (measured: page text from Firefox bled through the
--- workspace labels). Keyed on the layer-shell namespace the QML sets.
-hl.layer_rule({
-    name         = "overview-blur",
-    match        = { namespace = "^qs-overview$" },
-    blur         = true,
-    ignore_alpha = 0.2,
-})
+-- The workspace overview (quickshell/overview, layer-shell namespace
+-- "qs-overview") deliberately has NO layer rule. It used to have one that blurred
+-- everything behind it; that was replaced by the overlay painting the real
+-- wallpaper itself under glass panes. That removes a full-screen compositor blur
+-- pass from every animation frame, and the wallpaper covers the windows behind it,
+-- so no window text bleeds through, which was the only reason the blur existed.
