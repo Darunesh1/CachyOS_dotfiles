@@ -254,6 +254,28 @@ ShellRoot {
         refresh.restart()
     }
 
+    // The last 20 wheel events the overlay received, newest last.
+    property var wheelEvents: []
+    property int wheelCount: 0
+    function noteWheel(s) {
+        root.wheelCount++
+        const a = root.wheelEvents.slice(-19)
+        a.push(root.wheelCount + " " + s)
+        root.wheelEvents = a
+    }
+
+    // Scroll goes to the surface under the POINTER, and a touchpad swipe never moves
+    // the pointer after the overlay maps, so Hyprland may keep it on the window
+    // underneath and the scroll never reaches us (the arrow keys do, because keyboard
+    // focus is forced). Warping the cursor to where it already is makes Hyprland
+    // re-pick the surface under it (Actions::moveCursor ends in
+    // simulateMouseMovement()) without the pointer visibly moving.
+    // Hypothesis from the symptom, not yet seen on a touchpad.
+    Process {
+        id: refocus
+        command: ["sh", "-c", "p=$(hyprctl cursorpos) && hyprctl dispatch \"hl.dsp.cursor.move({ x = ${p%,*}, y = ${p#*, } })\""]
+    }
+
     // ── the swipe ───────────────────────────────────────────────────────────
     function gestureLine(line) {
         const a = line.trim().split(" ")
@@ -387,6 +409,7 @@ ShellRoot {
                 running = false
                 root.sheetReady = true
                 if (root.trace) console.log("TRACE sheet " + Date.now() + " tries " + tries)
+                if (!refocus.running) refocus.running = true
                 // A key-opened (non-swipe) overview starts animating now.
                 if (root.pendingOpen) { root.pendingOpen = false; root.settleTo(1) }
                 return
@@ -503,6 +526,11 @@ ShellRoot {
         // Feeds a swipe line exactly as the gesture file would, so a swipe can be
         // scripted without a touchpad.
         function swipe(line: string): void { root.gestureLine(line) }
+        // The last wheel events this overlay received, and how many in all.
+        function wheellog(): string {
+            return "received " + root.wheelCount + " wheel events; last " + root.wheelEvents.length + ":\n" + root.wheelEvents.join("\n")
+        }
+        function refocusPointer(): void { if (!refocus.running) refocus.running = true }
         function state(): string {
             return JSON.stringify({
                 phase: root.phase, intro: root.intro, expand: root.expand,
@@ -672,8 +700,10 @@ ShellRoot {
                 onWheel: event => {
                     const ax = event.angleDelta.x, ay = event.angleDelta.y
                     const px = event.pixelDelta.x, py = event.pixelDelta.y
-                    // Logged so a touchpad that still does not scroll can be
-                    // diagnosed from real events instead of guessed at.
+                    // Kept, always, so `wheellog` can say whether a touchpad that does
+                    // not scroll is sending events at all, without a restart.
+                    root.noteWheel("angle=" + ax + "," + ay + " pixel=" + px + "," + py +
+                        " phase=" + event.phase + " dev=" + event.device.type + " state=" + root.phase)
                     if (root.trace) console.log("TRACE wheel angle=" + ax + "," + ay + " pixel=" + px + "," + py +
                         " phase=" + event.phase + " inverted=" + event.inverted + " dev=" + event.device.type)
                     if (root.dragging || root.phase !== "open") return

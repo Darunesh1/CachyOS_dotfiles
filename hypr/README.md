@@ -308,7 +308,7 @@ On the 8 GB Intel-iGPU laptop, with the test hooks below.
 
 `qs ipc -c overview call overview <fn>`: `state`, `swipe "<line>"` (feeds a line to the
 gesture reader exactly as the file would, so a swipe can be scripted without a
-touchpad), `reveal`, `conceal`, `toggleShow`, `select`, `goto <i>`, `flat <bool>`,
+touchpad), `reveal`, `conceal`, `toggleShow`, `select`, `wheellog`, `refocusPointer`, `goto <i>`, `flat <bool>`,
 `faceAt <x> <y>`, `dump`, `demo`, `quit`. `OVERVIEW_TRACE=1` logs `begin`, `sheet`,
 `firstframe`, every `intro` and `pos` change, late frames and every wheel event;
 `QSG_RENDER_TIMING=1` logs scene-graph frame times (it inflates CPU, so do not read CPU
@@ -354,9 +354,18 @@ with it on).
   a touchpad: the old handler moved the cube `delta / (0.85 * cardW)` faces, about 800 px
   per face, and on lift rounded to the nearest face, so an ordinary swipe moved under half
   a face and rounded to where it started. It now takes about 300 px per face and a swipe
-  of more than 0.1 face moves at least one. **If it still does not scroll,** run
-  `OVERVIEW_TRACE=1` and send the `TRACE wheel` lines; they show whether events arrive at
-  all and in what shape.
+  of more than 0.1 face moves at least one. **That did not fix it on the touchpad**, which
+  pointed elsewhere: the arrow keys worked and the scroll did not. Keyboard focus is forced
+  to the overlay but **pointer focus is not**, and a touchpad swipe never moves the pointer
+  after the overlay maps, so Hyprland may keep it on the window underneath and the scroll
+  never arrives. The overlay now warps the cursor to where it already is when its window
+  maps (`hl.dsp.cursor.move`, which ends in `simulateMouseMovement()` in Hyprland's
+  `Actions::moveCursor`), so the surface under the pointer is picked again with no visible
+  movement (checked: five warps to its own position left `hyprctl cursorpos` unchanged).
+  **Still a hypothesis from the symptom, not yet seen on a touchpad.** To see what the
+  overlay receives, with no restart and no env var:
+  `qs ipc -c overview call overview wheellog` prints how many wheel events arrived and the
+  last 20 (angle, pixel, phase, device). Zero after a scroll means they never reach it.
 - **A frozen process ignores polite signals.** `timeout 1` alone only sends SIGTERM and
   `qs kill` is also polite, so a stopped overview took 31 seconds and stayed alive. The
   script asks over IPC with `timeout -k`, then `SIGKILL`s by pid.
