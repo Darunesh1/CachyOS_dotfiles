@@ -126,6 +126,31 @@ Consequences worth keeping here because they bear on the decision:
   crossfade itself and relies on Hyprland's own `layersIn` / `layersOut` fade. Changing
   those in `config/animations.lua` changes how the overview appears and disappears.
 
+## Update, 2026-11-16 (later): it follows the swipe, and it can be resident
+
+The cube was changed from "appears when the swipe ends" to "follows the fingers": your
+current screen shrinks into the middle at the speed of the swipe and becomes the cube,
+and the chosen workspace grows back out to fill the screen. That forced one cost this
+record did not plan for, and one new decision.
+
+* **Decision: a resident, hidden instance.** A gesture function runs once, when the swipe
+  ends; `hl.gesture` also takes `start` / `update` / `finish` callbacks. Following the
+  fingers needs the overlay already running, because starting one takes ~200 ms and a
+  swipe lasts ~250-400 ms. The callbacks write one line per event to a tmpfs file that
+  the overlay reads with `tail -F` (0.65 ms median). Spawning a process per event and a
+  FIFO were both rejected (a process per event costs most of a core; opening a FIFO for
+  writing hangs the compositor until a reader exists).
+* **Bad, measured:** a hidden resident instance is ~236 MiB RSS, of which ~137 MiB is
+  anonymous. My estimate beforehand was 110-170 MiB. It is a standing cost on an 8 GB
+  machine where systemd-oomd killed the session twice (ADR 0001).
+* **So there are two tiers.** `lite` (Game Mode on, or MemAvailable low) has no resident
+  instance: it starts on demand and cannot follow the first ~200 ms of a swipe. The
+  marks (1.0 GiB to drop, 1.6 GiB to return) are a first guess, not a measurement.
+  Details and the measurements are in [../hypr/README.md](../hypr/README.md).
+* **The separate-process choice again paid for itself:** a `kill -9` while open left
+  Hyprland on the same PID with every window and the focused workspace intact, and a
+  frozen overview is force-closed in about 1.4 s.
+
 ## More Information
 
 [../hypr/README.md](../hypr/README.md) documents usage. Sources: PR

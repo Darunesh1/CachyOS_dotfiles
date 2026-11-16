@@ -1670,11 +1670,40 @@ BINARIES
         ov_why="hypr/scripts/overview/toggle.sh is missing or not executable"
     elif ! grep -vE '^[[:space:]]*--' "$REPO/hypr/config/input.lua" 2>/dev/null | grep -q 'direction[[:space:]]*=[[:space:]]*"up"'; then
         ov_why="no 3-finger swipe-up gesture in hypr/config/input.lua"
+    # The callback table form is what lets the cube follow the fingers. The plain
+    # `action = function() ... end` form fires once, when the swipe ENDS, and
+    # nothing would look broken: the overview would simply appear late again.
+    elif ! grep -vE '^[[:space:]]*--' "$REPO/hypr/config/input.lua" 2>/dev/null | grep -qE '^[[:space:]]*finish[[:space:]]*='; then
+        ov_why="the swipe gesture in input.lua has no start/update/finish callbacks, so the cube cannot follow your fingers"
+    elif ! grep -vE '^[[:space:]]*--' "$REPO/hypr/config/autostart.lua" 2>/dev/null | grep -q 'overview/toggle.sh resident'; then
+        ov_why="autostart.lua does not start the resident overview"
     fi
     if [[ -z "$ov_why" ]]; then
         row OK "workspace overview" "3-finger swipe up / SUPER+O; separate quickshell process, cannot take the session down"
     else
         row WARN "workspace overview" "$ov_why"
+    fi
+
+    # Prism's resident instance. It is meant to be running except in the two
+    # situations toggle.sh calls "lite" (Game Mode on, or memory short), where it
+    # is meant to be ABSENT. Either way it is only a problem if what is running
+    # does not match what toggle.sh says should be: a missing resident when there is
+    # room means every swipe starts late, and a resident during Game Mode is ~140 MiB
+    # of anonymous memory held against the game. Asked of the running system.
+    local pr_tier pr_pid="" pr_comm=""
+    pr_tier=$("$REPO/hypr/scripts/overview/toggle.sh" tier 2>&1 | tr '\n' ' ')
+    pr_pid=$(cat "${XDG_RUNTIME_DIR:-/tmp}/prism/pid" 2>/dev/null)
+    [[ "$pr_pid" =~ ^[0-9]+$ ]] && pr_comm=$(cat "/proc/$pr_pid/comm" 2>/dev/null)
+    if [[ "$pr_tier" == *lite* ]]; then
+        if [[ "$pr_comm" == qs ]]; then
+            row WARN "prism resident" "running although the tier is lite (${pr_tier% lite *}); run: hypr/scripts/overview/toggle.sh stop"
+        else
+            row OK "prism resident" "stopped, as it should be: ${pr_tier% lite *}"
+        fi
+    elif [[ "$pr_comm" == qs ]]; then
+        row OK "prism resident" "running (pid $pr_pid), so the swipe can follow your fingers"
+    else
+        row WARN "prism resident" "not running although there is room; swipes will start late. Run: hypr/scripts/overview/toggle.sh resident"
     fi
 
     # The three conditions behind "the screen comes back black after a resume".

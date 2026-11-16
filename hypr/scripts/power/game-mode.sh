@@ -25,6 +25,10 @@
 #     keeps its last icon; internet re-checks resume when Game Mode ends
 #   * Thunar thumbnails off and tumblerd killed, so opening a folder of
 #     screenshots mid-game decodes nothing
+#   * the Prism overview (quickshell/overview) stopped, which frees its resident
+#     ~195 MiB. Swiping up still opens it, in a lite tier started on demand (plainer,
+#     and it cannot follow the first ~200 ms of the swipe); it comes back resident
+#     when Game Mode ends. See scripts/overview/toggle.sh.
 #
 # Everything that is changed is saved first and restored exactly on "off" --
 # including whichever power profile was active before, not always balanced.
@@ -92,7 +96,10 @@ enable() {
     # Game Mode ends.
     pkill -x tumblerd
 
+    # ── Prism ───────────────────────────────────────────────────────────────
+    # After `active` exists, so toggle.sh sees Game Mode on and starts nothing new.
     touch "$STATE_DIR/active"
+    "$SCRIPTS/../overview/toggle.sh" stop
 
     local sched=""
     have scxctl && sched=$(scxctl get 2>/dev/null)
@@ -135,6 +142,9 @@ disable() {
     hyprctl eval "hl.config({ render = { direct_scanout = ${scanout:-0} } })" >/dev/null
 
     rm -rf "$STATE_DIR"
+    # After the state is gone, so toggle.sh sees Game Mode off. It declines on its
+    # own if memory is short, so this is safe to ask for unconditionally.
+    "$SCRIPTS/../overview/toggle.sh" resident
     notify "Disabled"
 }
 

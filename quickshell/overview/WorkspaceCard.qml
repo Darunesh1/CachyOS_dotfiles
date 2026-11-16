@@ -69,7 +69,8 @@ Item {
 
     // A face behind the drum is never drawn, and neither is one far off in the
     // flat row. About half the faces cost nothing at any moment.
-    visible: cosP > -0.1 && Math.abs(offset) < 4.6
+    // Lite (Game Mode, or memory is short) draws the front face and one either side.
+    visible: cosP > -0.1 && Math.abs(offset) < (shell.lite ? 1.6 : 4.6)
 
     transform: Matrix4x4 {
         matrix: {
@@ -121,8 +122,9 @@ Item {
 
     // Soft sheen from the left. Its strength follows how far the face is turned,
     // so the glass glints as the drum rotates: one binding on a number that
-    // already exists, no shader.
+    // already exists, no shader. Not drawn in lite.
     Rectangle {
+        visible: !shell.lite
         width: card.cardW * 0.55
         height: card.cardH
         radius: card.rd
@@ -184,7 +186,9 @@ Item {
                     // across the overlay, and dropped. That was wrong: the ghost was
                     // the window's alpha buffer (see `color` in shell.qml) and
                     // appeared with and without this line.
-                    constraintSize: Qt.size(Math.round(thumb.width * 1.3), Math.round(thumb.height * 1.3))
+                    // Lite takes 0.8x, which is smaller than drawn, to hold less memory.
+                    constraintSize: Qt.size(Math.round(thumb.width * (shell.lite ? 0.8 : 1.3)),
+                                            Math.round(thumb.height * (shell.lite ? 0.8 : 1.3)))
                     live: false
 
                     // captureFrame() called at once fails with "Cannot capture
@@ -194,9 +198,11 @@ Item {
                     // one from retrying for as long as the overview is open.
                     property int tries: 0
                     Timer {
-                        interval: 120
+                        // Fast while the cube is opening, because the pictures are
+                        // what the faces are waiting for (was 120 ms).
+                        interval: 40
                         repeat: true
-                        running: !pic.hasContent && pic.tries < 25
+                        running: !pic.hasContent && pic.tries < 75
                         onTriggered: { pic.tries++; pic.captureFrame() }
                     }
 
@@ -204,7 +210,7 @@ Item {
                     // repeating: it fires once per stop and costs nothing after.
                     Timer {
                         interval: 200
-                        running: card.isFront && shell.settled && pic.hasContent
+                        running: !shell.lite && card.isFront && shell.settled && pic.hasContent
                         onTriggered: pic.captureFrame()
                     }
                 }

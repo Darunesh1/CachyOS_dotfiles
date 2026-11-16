@@ -1,6 +1,7 @@
-// Workspace overview: swipe up with three fingers and your workspaces rise from
-// the bottom of the screen as a glass cube you can turn. Scroll to rotate it,
-// click to go, drag a window onto another face to move it. Esc, a click on the
+// Prism: the workspace overview. Swipe up with three fingers and your current
+// screen shrinks, at the speed of your fingers, into the middle of the display and
+// becomes the front face of a glass cube of workspaces you can turn. Pick one and
+// it grows from the middle back out to fill the screen. Esc, a click on the
 // background, or a swipe down closes it.
 //
 // WHY THIS IS A SEPARATE PROCESS and not a Hyprland plugin: a plugin runs inside
@@ -8,23 +9,36 @@
 // This is an ordinary client; if it dies, only the overview closes. See
 // decisions/0007-workspace-overview-in-quickshell.md.
 //
+// TWO TIERS, because 8 GB is a hard constraint (ADR 0001):
+//   full  RESIDENT: started at login and kept hidden, so the swipe can drive it
+//         from the first millimetre. Costs memory all the time.
+//   lite  started on demand and quits when closed (PRISM_LITE=1): used while
+//         Game Mode is on or memory is low. Cannot follow the first ~200 ms of a
+//         swipe, and it draws less (no sheen, smaller pictures, fewer faces).
+// hypr/scripts/overview/toggle.sh chooses; see hypr/README.md.
+//
+// THE SWIPE: Hyprland's Lua gesture callbacks (config/input.lua) append lines to
+// $XDG_RUNTIME_DIR/prism/gesture, and this file reads them with `tail -F`:
+//   B up|down      a swipe began        M <p>        progress 0..1 (1 = fully open)
+//   F <cancelled> <v>   fingers lifted; v is progress per millisecond
+// Measured transport latency, write to QML: median 0.65 ms, p95 1.7 ms.
+//
 // WHY THE DATA COMES FROM `hyprctl`, not from Quickshell's Hyprland module:
 // measured on Hyprland 0.57.2 + Quickshell 0.3.2, `HyprlandWorkspace.id` is -1
 // for EVERY workspace (names are right, ids are not) and so is every window's
-// workspace id. Quickshell is used only for what it does well here, the live
-// window pictures (ScreencopyView). Layout comes from `hyprctl ... -j`.
+// workspace id. Layout comes from `hyprctl ... -j`; Quickshell is used for the
+// pictures (ScreencopyView).
 //
 // Commands go out through `hyprctl dispatch 'hl.dsp...'`, never through
 // Hyprland.dispatch(): this repo runs the Lua config, where the legacy string
-// form is rejected, and the docs do not say what dispatch() sends.
+// form is rejected.
 //
-// MOTION is three numbers and nothing else: `position` (which face is in front,
-// sprung), `intro` (rise from below, 0..1) and `curve` (1 = cube, 0 = flat row).
-// Every face is a binding on them; see WorkspaceCard.qml. No animation runs when
-// nothing is moving, so an idle overview draws no frames.
-//
-// Started on demand by hypr/scripts/overview/toggle.sh and exits when closed, so
-// it costs nothing while you are not looking at it.
+// MOTION is a few numbers and nothing else: `intro` (0 = your screen at full
+// size, 1 = the cube is open; driven by your fingers, then settled), `expand`
+// (the chosen face growing to fill the screen), `position` (which face is in
+// front, sprung) and `curve` (1 = cube, 0 = flat row, while dragging). Every face
+// is a binding on them; see WorkspaceCard.qml. No animation runs when nothing is
+// moving, so an idle overview draws no frames.
 
 import QtQuick
 import Quickshell
@@ -35,18 +49,33 @@ import Quickshell.Hyprland
 ShellRoot {
     id: root
 
+    // ── tier and environment ────────────────────────────────────────────────
+    readonly property bool lite: Quickshell.env("PRISM_LITE") === "1"
+    readonly property bool resident: Quickshell.env("PRISM_RESIDENT") === "1"
+    readonly property string run: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/prism"
+    readonly property bool trace: Quickshell.env("OVERVIEW_TRACE") === "1"
+    // Below this much MemAvailable a hidden resident instance quits itself, so it
+    // is not holding ~150 MiB while the machine is short. The starting figure is
+    // a guess to be replaced by measurement; toggle.sh owns the way back up.
+    readonly property int lowMemKb: parseInt(Quickshell.env("PRISM_LOW_KB") || "1000000")
+
+    // ── state ───────────────────────────────────────────────────────────────
+    // hidden | drag (fingers opening) | settling (animating) | open | dragclose
+    property string phase: "hidden"
+    property bool selecting: false      // a face was chosen and is growing to fill the screen
+    property bool pendingOpen: false    // opened by key: start animating once the screen picture is in
+
     // ── data ────────────────────────────────────────────────────────────────
     property var cards: []                       // [{ id, label, current, isNew, windows: [...] }]
     property var mon: ({ name: "", x: 0, y: 0, w: 1920, h: 1080 })
     property bool dataReady: false
-    property bool wallDone: false
-    readonly property bool ready: dataReady && wallDone
-    property bool closing: false
+    property bool sheetReady: false              // the picture of your screen has arrived
 
     // ── motion ──────────────────────────────────────────────────────────────
     property real position: 0        // which face is in front, in face units
     property bool tracking: false    // true while fingers drive `position` directly
-    property real intro: 0           // 0 hidden below the screen, 1 settled
+    property real intro: 0           // 0 = your screen at full size, 1 = cube open
+    property real expand: 0          // 0 = cube, 1 = the chosen face fills the screen
     property real curve: 1           // 1 = cube, 0 = flat row (while dragging)
 
     property bool dragging: false
@@ -62,21 +91,33 @@ ShellRoot {
     readonly property real uiScale: win.height / 1080
     readonly property color accent: "#8ab4f8"
     readonly property string fontFamily: "JetBrainsMono Nerd Font"
-    readonly property bool trace: Quickshell.env("OVERVIEW_TRACE") === "1"
     // True once the cube has come to rest on a face with nothing driving it. The
     // face in front takes a fresh snapshot when this becomes true.
-    readonly property bool settled: !tracking && !closing && Math.abs(position - Math.round(position)) < 0.02
+    readonly property bool settled: phase === "open" && !tracking && !selecting && Math.abs(position - Math.round(position)) < 0.02
+
+    // The cube builds itself as you open: the faces swing out of a flat row into
+    // the cube over the second half of the swipe, and fade in with it.
+    readonly property real cubeIn: smooth(0.35, 1, intro)
+    readonly property real cubeFade: smooth(0.5, 1, intro)
+    readonly property real sheetFade: 1 - smooth(0.78, 1, intro)
 
     Behavior on position {
-        enabled: !root.tracking && root.ready
-        // Tuned by measuring settle time and overshoot with OVERVIEW_TRACE=1.
-        SpringAnimation { spring: 3.2; damping: 0.32; epsilon: 0.002 }
+        enabled: !root.tracking && root.phase !== "hidden"
+        // Tuned by measuring settle time and overshoot with OVERVIEW_TRACE=1. Lite
+        // is critically damped, so it settles in fewer frames and never overshoots.
+        SpringAnimation { spring: 3.2; damping: root.lite ? 0.6 : 0.32; epsilon: 0.002 }
     }
     Behavior on curve { NumberAnimation { duration: 240; easing.type: Easing.InOutCubic } }
 
     onPositionChanged: if (trace) console.log("TRACE pos " + Date.now() + " " + position.toFixed(4))
+    onIntroChanged: if (trace) console.log("TRACE intro " + Date.now() + " " + intro.toFixed(3))
 
     // ── helpers ─────────────────────────────────────────────────────────────
+
+    function smooth(a, b, x) {
+        const t = Math.max(0, Math.min(1, (x - a) / (b - a)))
+        return t * t * (3 - 2 * t)
+    }
 
     // Which face an unbounded position means: wrapped round when the cube loops,
     // clamped to the ends when it is too small to loop.
@@ -110,18 +151,75 @@ ShellRoot {
         Quickshell.execDetached(["hyprctl", "dispatch", expr])
     }
 
-    // Every way out goes through here, so the overview always plays its exit.
-    function close() {
-        if (root.closing) return
-        root.closing = true
+    // ── opening and closing ─────────────────────────────────────────────────
+
+    // `fingers` true: a swipe is driving `intro`. False: a key or the lite path,
+    // so play the open animation once the picture of the screen is in.
+    function begin(fingers) {
+        if (root.phase !== "hidden") return
+        root.selecting = false
+        root.expand = 0
+        root.intro = 0
+        root.dataReady = false
+        root.sheetReady = false
+        root.curve = 1
         root.tracking = false
-        closeAnim.start()
-        failsafe.start()
+        root.phase = fingers ? "drag" : "settling"
+        root.pendingOpen = !fingers
+        if (trace) console.log("TRACE begin " + Date.now() + " fingers=" + fingers)
+        loader.running = true
+        sheetTimer.tries = 0
+        sheetTimer.start()
+        guard.restart()
     }
 
+    // Animate `intro` to 0 or 1. Shorter when there is less distance to cover, so
+    // a swipe that was nearly there finishes quickly.
+    function settleTo(target) {
+        settleAnim.stop()
+        settleAnim.from = root.intro
+        settleAnim.to = target
+        settleAnim.duration = Math.round(110 + 260 * Math.abs(target - root.intro))
+        root.phase = "settling"
+        settleAnim.start()
+    }
+
+    // Every way out goes through here, so the overview always plays its exit.
+    function close() {
+        if (root.phase === "hidden" || root.phase === "settling" && settleAnim.to === 0 || root.selecting) return
+        root.tracking = false
+        root.dragging = false
+        root.settleTo(0)
+        guard.restart()
+    }
+
+    // Back to idle. A resident instance stays alive but holds no pictures and no
+    // window; an on-demand one just quits.
+    function finishHide() {
+        guard.stop()
+        sheetTimer.stop()
+        root.phase = "hidden"
+        root.selecting = false
+        root.pendingOpen = false
+        root.expand = 0
+        root.intro = 0
+        root.cards = []
+        root.dataReady = false
+        root.sheetReady = false
+        root.reloadWall()
+        if (trace) console.log("TRACE hidden " + Date.now())
+        if (!root.resident) Qt.quit()
+    }
+
+    // The chosen face grows from the middle to fill the screen, and the real
+    // desktop of that workspace is underneath by the time it is done.
     function focusWorkspace(id) {
+        if (root.selecting || root.phase === "hidden") return
         lua("hl.dsp.focus({ workspace = " + id + " })")
-        root.close()
+        root.selecting = true
+        root.tracking = false
+        expandAnim.restart()
+        guard.restart()
     }
 
     function activate(i) {
@@ -131,6 +229,7 @@ ShellRoot {
 
     // A side face rotates to the front first; only the front face opens.
     function faceClicked(i) {
+        if (root.phase !== "open") return
         if (i !== root.frontIndex) {
             root.tracking = false
             root.position = Math.round(root.position) + root.wrapDelta(i - root.frontIndex)
@@ -140,6 +239,7 @@ ShellRoot {
     }
 
     function stepFace(dir) {
+        if (root.phase !== "open") return
         root.tracking = false
         root.position = root.snap(Math.round(root.position) + dir)
     }
@@ -152,6 +252,39 @@ ShellRoot {
     function moveWindow(address, workspaceId) {
         lua('hl.dsp.window.move({ workspace = ' + workspaceId + ', follow = false, window = "address:' + address + '" })')
         refresh.restart()
+    }
+
+    // ── the swipe ───────────────────────────────────────────────────────────
+    function gestureLine(line) {
+        const a = line.trim().split(" ")
+        if (a[0] === "B") {
+            if (a[1] === "up" && root.phase === "hidden") {
+                root.begin(true)
+            } else if (a[1] === "down" && root.phase === "open") {
+                root.phase = "dragclose"
+                root.tracking = false
+                guard.restart()
+            }
+        } else if (a[0] === "M") {
+            if (root.phase === "drag" || root.phase === "dragclose") {
+                root.intro = Math.max(0, Math.min(1, parseFloat(a[1])))
+                guard.restart()
+            }
+        } else if (a[0] === "F") {
+            root.release(a[1] === "1", parseFloat(a[2]) || 0)
+        }
+    }
+
+    // Fingers lifted. Commit by how far it got, or by how fast it was going.
+    function release(cancelled, v) {
+        const fast = 0.0015            // progress per ms; unverified, tune on the touchpad
+        if (root.phase === "drag") {
+            const open = !cancelled && v > -fast && (root.intro > 0.35 || v > fast)
+            root.settleTo(open ? 1 : 0)
+        } else if (root.phase === "dragclose") {
+            const shut = !cancelled && v < fast && (root.intro < 0.65 || v < -fast)
+            root.settleTo(shut ? 0 : 1)
+        }
     }
 
     // ── a drag unfolds the cube so every workspace is a drop target ─────────
@@ -213,7 +346,9 @@ ShellRoot {
         if (!root.dataReady) {
             // First read only: start with your own workspace in front, with no
             // spring, because nothing is on screen yet.
+            root.tracking = true
             root.position = Math.max(0, list.findIndex(c => c.current))
+            root.tracking = false
             root.dataReady = true
         } else if (!root.loops && root.position > list.length - 1) {
             root.position = list.length - 1
@@ -224,7 +359,6 @@ ShellRoot {
     // window list and the workspace list cannot disagree.
     Process {
         id: loader
-        running: true
         command: ["sh", "-c",
             "jq -n --argjson c \"$(hyprctl clients -j)\" --argjson w \"$(hyprctl workspaces -j)\" " +
             "--argjson m \"$(hyprctl monitors -j)\" '{clients:$c, workspaces:$w, monitors:$m}'"]
@@ -238,50 +372,145 @@ ShellRoot {
         onTriggered: { if (!loader.running) loader.running = true }
     }
 
-    // ── open and close ──────────────────────────────────────────────────────
-    // It rises from the bottom edge, matching a finger swiping up, and sinks
-    // back down on close.
-    onReadyChanged: {
-        if (trace) console.log("TRACE ready " + Date.now())
-        if (ready && !closing) openAnim.start()
+    // The picture of your screen: asked for as soon as the window exists, retried
+    // until the compositor has a capture session for it. Measured: it arrives in
+    // about 30 ms and shows the desktop WITHOUT the overlay, bar included, because
+    // the overlay has not been composited yet. A capture needs a mapped window;
+    // a hidden one never gets a frame.
+    Timer {
+        id: sheetTimer
+        property int tries: 0
+        interval: 5
+        repeat: true
+        onTriggered: {
+            if (sheet.hasContent) {
+                running = false
+                root.sheetReady = true
+                if (root.trace) console.log("TRACE sheet " + Date.now() + " tries " + tries)
+                // A key-opened (non-swipe) overview starts animating now.
+                if (root.pendingOpen) { root.pendingOpen = false; root.settleTo(1) }
+                return
+            }
+            tries++
+            if (tries > 400) {
+                // No picture of the screen after ~2 s: carry on without it.
+                running = false
+                root.sheetReady = true
+                if (root.pendingOpen) { root.pendingOpen = false; root.settleTo(1) }
+                return
+            }
+            sheet.captureFrame()
+        }
     }
-    onIntroChanged: if (trace) console.log("TRACE intro " + Date.now() + " " + intro.toFixed(3))
-    Component.onCompleted: if (trace) console.log("TRACE start " + Date.now())
+
+    // Nothing may hold the keyboard for ever. A swipe that stops sending lines
+    // (Hyprland reloaded mid-gesture, say), or an animation that never ends,
+    // must still let go.
+    Timer {
+        id: guard
+        interval: 2500
+        onTriggered: {
+            if (root.phase === "drag" || root.phase === "dragclose") root.release(false, 0)
+            else if (root.phase === "settling" || root.selecting) root.finishHide()
+        }
+    }
 
     NumberAnimation {
-        id: openAnim
+        id: settleAnim
         target: root; property: "intro"
-        from: 0; to: 1; duration: 340
         easing.type: Easing.OutCubic
+        onFinished: {
+            if (root.intro <= 0.001) root.finishHide()
+            else { root.phase = "open"; guard.stop() }
+        }
     }
     NumberAnimation {
-        id: closeAnim
-        target: root; property: "intro"
-        to: 0; duration: 190
-        easing.type: Easing.InCubic
-        onFinished: Qt.quit()
+        id: expandAnim
+        target: root; property: "expand"
+        from: 0; to: 1; duration: 230
+        easing.type: Easing.OutCubic
+        onFinished: root.finishHide()
     }
-    // If the exit animation never finishes, the overview must still go away.
-    Timer { id: failsafe; interval: 700; onTriggered: Qt.quit() }
 
-    // The wallpaper decodes asynchronously. Do not start rising until it is in,
-    // or the desktop flashes behind a half-drawn overview; but never wait long.
-    Timer { interval: 400; running: true; onTriggered: root.wallDone = true }
+    // ── the swipe feed and the resident's bookkeeping ───────────────────────
+    Process {
+        running: root.resident
+        command: ["sh", "-c", "mkdir -p '" + root.run + "' && : >> '" + root.run + "/gesture' && exec tail -n 0 -F '" + root.run + "/gesture'"]
+        stdout: SplitParser { onRead: data => root.gestureLine(data) }
+    }
+    // Lets the gesture callback know a resident instance is there. A stale file
+    // after a crash is harmless: the reader checks /proc/<pid> too.
+    FileView { id: pidFile; path: root.run + "/pid" }
+    Component.onCompleted: {
+        if (trace) console.log("TRACE start " + Date.now() + " resident=" + resident + " lite=" + lite)
+        if (resident) pidFile.setText(String(Quickshell.processId) + "\n")
+        else root.begin(false)
+        root.reloadWall()
+    }
+
+    // Memory guard. While hidden, a resident instance that finds the machine short
+    // of memory quits, giving back ~150 MiB; toggle.sh brings it back when there
+    // is room again. `MemAvailable` already counts reclaimable cache.
+    Process {
+        id: mem
+        command: ["sh", "-c", "awk '/^MemAvailable:/ {print $2}' /proc/meminfo"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const kb = parseInt(this.text)
+                if (root.trace) console.log("TRACE memavail_kb " + kb)
+                if (kb > 0 && kb < root.lowMemKb && root.phase === "hidden") {
+                    console.log("prism: MemAvailable " + kb + " kB below " + root.lowMemKb + ", quitting to free memory")
+                    Qt.quit()
+                }
+            }
+        }
+    }
+    Timer {
+        interval: 15000
+        repeat: true
+        running: root.resident && root.phase === "hidden"
+        onTriggered: { if (!mem.running) mem.running = true }
+    }
+
+    // The wallpaper file is rewritten every few minutes by the wallpaper cycle.
+    // Reloading it each time the overview goes away keeps the next open current
+    // without decoding on the critical path.
+    property string wallSource: ""
+    function reloadWall() {
+        root.wallSource = ""
+        Qt.callLater(() => { root.wallSource = "file://" + Quickshell.env("HOME") + "/Pictures/Wallpaper/current_wallpaper" })
+    }
 
     // ── test and control hooks (qs ipc -c overview call overview <fn>) ──────
     IpcHandler {
         target: "overview"
+        // Not named show/hide: `qs ipc call overview show` is read by qs itself as a
+        // request to list the target (measured: it printed the function list and
+        // returned 0 without calling anything), so these are reveal/conceal.
+        function reveal(): void { root.begin(false) }
+        function conceal(): void { root.close() }
+        function toggleShow(): void { if (root.phase === "hidden") root.begin(false); else root.close() }
+        // Same as `conceal`.
         function close(): void { root.close() }
+        function quit(): void { Qt.quit() }
+        // Chooses the face in front, as Enter does. For scripted checks.
+        function select(): void { root.activate(root.frontIndex) }
         function goto(i: int): void {
             root.tracking = false
             root.position = Math.round(root.position) + root.wrapDelta(i - root.frontIndex)
         }
         function flat(on: bool): void { root.curve = on ? 0 : 1 }
+        // Feeds a swipe line exactly as the gesture file would, so a swipe can be
+        // scripted without a touchpad.
+        function swipe(line: string): void { root.gestureLine(line) }
         function state(): string {
             return JSON.stringify({
-                position: root.position, curve: root.curve, intro: root.intro,
+                phase: root.phase, intro: root.intro, expand: root.expand,
+                position: root.position, curve: root.curve,
                 front: root.frontIndex, faces: root.faceCount,
-                cardW: win.cardW, cardH: win.cardH, ready: root.ready
+                sheet: root.sheetReady, data: root.dataReady,
+                resident: root.resident, lite: root.lite,
+                cardW: win.cardW, cardH: win.cardH
             })
         }
         // Which face is under this screen point? Exists to check hit-testing on
@@ -334,12 +563,11 @@ ShellRoot {
         // printing a recognisable line.
         //
         // The cost of opaque is that the overlay cannot crossfade itself over the
-        // desktop. It does not need to: Hyprland already fades layer surfaces in
-        // and out (layersIn / layersOut in config/animations.lua), so it is mapped
-        // only once everything is ready (`visible`) and the compositor does the
-        // fade. Mapping it early would show a black frame.
+        // desktop. It does not need to: your screen is the first thing it shows (the
+        // `sheet`), and Hyprland fades layer surfaces in and out (layersIn /
+        // layersOut in config/animations.lua).
         color: "black"
-        visible: root.ready
+        visible: root.phase !== "hidden"
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
         WlrLayershell.namespace: "qs-overview"
@@ -351,11 +579,32 @@ ShellRoot {
         // Camera distance from the full-circle radius, so the perspective stays
         // the same while the cube unfolds instead of zooming.
         readonly property real camD: (cardW + 8) / (2 * Math.tan(root.step * Math.PI / 360)) * 3.2
+        // Where the middle of the cube sits, a little above centre so the labels fit.
+        readonly property real cubeLift: 24 * root.uiScale
 
         FocusScope {
             id: dragLayerItem
             anchors.fill: parent
             focus: true
+
+            // First frame presented after a swipe began, for measuring how long the
+            // overlay takes to appear. Only listens when tracing.
+            Connections {
+                enabled: root.trace && root.phase !== "hidden"
+                target: dragLayerItem.Window.window
+                property bool first: true
+                property double lastFrame: 0
+                function onFrameSwapped() {
+                    const now = Date.now()
+                    if (first) { first = false; console.log("TRACE firstframe " + now) }
+                    // A gap over 20 ms between frames while something is moving is a
+                    // late frame; gaps over 400 ms are just idle.
+                    else if (now - lastFrame > 20 && now - lastFrame < 400) console.log("TRACE late " + (now - lastFrame))
+                    else console.log("TRACE frame")
+                    lastFrame = now
+                }
+                function onVisibleChanged() { first = true }
+            }
 
             Keys.onEscapePressed: root.close()
             Keys.onLeftPressed: root.stepFace(-1)
@@ -366,20 +615,25 @@ ShellRoot {
             // ── backdrop: the real wallpaper, as glass ─────────────────────
             // Painted by the overlay itself instead of blurring the desktop: no
             // compositor blur pass, and no window text bleeding through. The path
-            // is the one wallpaper scripts keep pointing at what awww shows.
+            // is the one wallpaper scripts keep pointing at what awww shows. It is
+            // fully opaque from the start because it is what you see around your
+            // screen as that shrinks away.
             Image {
                 id: wall
                 anchors.fill: parent
-                source: "file://" + Quickshell.env("HOME") + "/Pictures/Wallpaper/current_wallpaper"
+                source: root.wallSource
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
-                sourceSize: Qt.size(win.screen ? win.screen.width : 1920, win.screen ? win.screen.height : 1080)
-                onStatusChanged: if (status === Image.Ready || status === Image.Error) root.wallDone = true
+                cache: false
+                // Lite decodes it at half size and lets the GPU scale it up.
+                sourceSize: Qt.size((win.screen ? win.screen.width : 1920) / (root.lite ? 2 : 1),
+                                    (win.screen ? win.screen.height : 1080) / (root.lite ? 2 : 1))
             }
             // Soft dark gradient so the glass reads on any wallpaper; heavier if
-            // the wallpaper failed to load.
+            // the wallpaper failed to load. It arrives with the swipe.
             Rectangle {
                 anchors.fill: parent
+                opacity: Math.min(1, root.intro * 1.25)
                 gradient: Gradient {
                     GradientStop { position: 0; color: wall.status === Image.Ready ? Qt.rgba(0.02, 0.03, 0.06, 0.28) : Qt.rgba(0.03, 0.04, 0.07, 0.92) }
                     GradientStop { position: 1; color: wall.status === Image.Ready ? Qt.rgba(0.02, 0.03, 0.06, 0.55) : Qt.rgba(0.03, 0.04, 0.07, 0.97) }
@@ -387,15 +641,42 @@ ShellRoot {
                 MouseArea { anchors.fill: parent; onClicked: root.close() }
             }
 
+            // ── your screen, shrinking into the middle ─────────────────────
+            // A still of the real desktop taken the instant the swipe begins, so at
+            // intro = 0 it is pixel-identical to what was there (bar included).
+            // `intro` is your fingers, so it shrinks at their speed; at 1 it sits
+            // exactly where the front face is, and fades out under it.
+            ScreencopyView {
+                id: sheet
+                // null while hidden: frees the picture and makes the next open
+                // capture a fresh one instead of showing the last.
+                captureSource: root.phase === "hidden" ? null : win.screen
+                live: false
+                visible: root.sheetReady && !root.selecting
+                opacity: root.sheetFade
+                width: win.width
+                height: win.height
+                x: 0
+                y: -win.cubeLift * root.intro
+                transformOrigin: Item.Center
+                scale: 1 - (1 - win.cardW / win.width) * root.intro
+            }
+
             // Scroll: a touchpad follows your fingers, a wheel notch steps one face.
             property real lastT: 0
             property real vel: 0
+            property real startPos: 0
+            property bool scrolling: false
             WheelHandler {
                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                 onWheel: event => {
-                    if (root.dragging || root.closing) return
                     const ax = event.angleDelta.x, ay = event.angleDelta.y
                     const px = event.pixelDelta.x, py = event.pixelDelta.y
+                    // Logged so a touchpad that still does not scroll can be
+                    // diagnosed from real events instead of guessed at.
+                    if (root.trace) console.log("TRACE wheel angle=" + ax + "," + ay + " pixel=" + px + "," + py +
+                        " phase=" + event.phase + " inverted=" + event.inverted + " dev=" + event.device.type)
+                    if (root.dragging || root.phase !== "open") return
                     const raw = Math.abs(ax) >= Math.abs(ay) ? ax : ay
                     const pxv = Math.abs(px) >= Math.abs(py) ? px : py
                     // A wheel notch is a large multiple of 120 with no pixel delta.
@@ -405,9 +686,17 @@ ShellRoot {
                         return
                     }
                     const px_ = pxv !== 0 ? pxv : raw * 0.6
+                    if (!dragLayerItem.scrolling) {
+                        dragLayerItem.scrolling = true
+                        dragLayerItem.startPos = root.position
+                        dragLayerItem.vel = 0
+                    }
                     const now = Date.now()
                     const dt = Math.max(8, now - dragLayerItem.lastT) / 1000
-                    const dPos = -px_ / (win.cardW * 0.85)
+                    // About 300 px of finger travel turns one face. The first version
+                    // used 0.85 of the card width (~800 px), so an ordinary swipe moved
+                    // the cube a fraction of a face and then snapped straight back.
+                    const dPos = -px_ / (win.cardW * 0.3)
                     dragLayerItem.vel = 0.7 * dragLayerItem.vel + 0.3 * (dPos / dt)
                     dragLayerItem.lastT = now
                     root.tracking = true
@@ -418,14 +707,20 @@ ShellRoot {
                     settle.restart()
                 }
             }
-            // Fingers lifted: carry a little momentum, then spring to the nearest face.
+            // Fingers lifted: project where the motion was headed, and land on a face.
+            // Any deliberate swipe moves at least one face in its direction, however
+            // short, so a gentle flick is never thrown away.
             Timer {
                 id: settle
                 interval: 90
                 onTriggered: {
+                    const d = root.position - dragLayerItem.startPos
+                    let n = Math.round(d + dragLayerItem.vel * 0.18)
+                    if (n === 0 && Math.abs(d) > 0.1) n = d > 0 ? 1 : -1
                     root.tracking = false
-                    root.position = root.snap(root.position + dragLayerItem.vel * 0.12)
+                    root.position = root.snap(Math.round(dragLayerItem.startPos) + n)
                     dragLayerItem.vel = 0
+                    dragLayerItem.scrolling = false
                 }
             }
 
@@ -434,13 +729,14 @@ ShellRoot {
                 id: stage
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.verticalCenter: parent.verticalCenter
-                // Rises from below as `intro` goes 0 -> 1.
-                anchors.verticalCenterOffset: -24 * root.uiScale + (1 - root.intro) * win.height * 0.46
+                anchors.verticalCenterOffset: -win.cubeLift * (1 - root.expand)
                 width: 1; height: 1
-                // A touch of growth on arrival, and a smaller footprint while
-                // unfolded so more workspaces fit on screen to drop onto.
-                scale: (0.9 + 0.1 * root.intro) * (1 - 0.5 * (1 - Math.max(0, root.curve)))
-                opacity: Math.min(1, root.intro * 1.7)
+                // A smaller footprint while unfolded so more workspaces fit on
+                // screen to drop onto; and, once a face is chosen, the whole cube
+                // grows until that face fills the screen.
+                scale: (1 - 0.5 * (1 - Math.max(0, root.curve))) * (1 + root.expand * (win.width / win.cardW - 1))
+                opacity: root.cubeFade
+                visible: root.cubeFade > 0.01
 
                 Repeater {
                     id: faces
@@ -450,7 +746,7 @@ ShellRoot {
                         cardW: win.cardW
                         cardH: win.cardH
                         pos: root.position
-                        curve: root.curve
+                        curve: root.curve * root.cubeIn
                         step: root.step
                         camD: win.camD
                     }

@@ -171,134 +171,205 @@ this paragraph recommended the wrong one. `hl.dsp.dpms("on")` (positional string
 joined with `;` rather than `&&` so a failing dpms call cannot skip the
 brightness restore.
 
-## Workspace overview
+## Workspace overview: Prism
 
 > **Decision record:** [decisions/0007-workspace-overview-in-quickshell.md](../decisions/0007-workspace-overview-in-quickshell.md)
 > owns why this is a Quickshell client and not a Hyprland plugin, and the options
-> rejected.
+> rejected. The feature is called **Prism**; its files and commands still say
+> `overview` (`quickshell/overview`, `toggle.sh`, `qs -c overview`).
 
-Swipe **up with three fingers** (or press `SUPER + O`). Your workspaces **rise from
-the bottom of the screen** as a glass cube, over your own wallpaper, sharp and
-unblurred. Each face is one workspace with its windows on it. Scroll to turn the
-cube; it never ends, because the last workspace is the neighbour of the first.
+Swipe **up with three fingers**, or press `SUPER + O`. Your **current screen shrinks
+into the middle of the display at the speed of your fingers** and becomes the front
+face of a glass cube of workspaces, over your own wallpaper, sharp and unblurred.
+Scroll to turn the cube; it never ends, because the last workspace is the neighbour
+of the first. Pick a workspace and **it grows from the middle back out to fill the
+screen**.
 
 | Do | Result |
 |---|---|
-| scroll or swipe sideways | turn the cube; a touchpad follows your fingers then settles on a face, a wheel notch moves one face |
-| `Left` / `Right` | turn one face |
+| swipe up, three fingers | your screen shrinks as you swipe, so it is open the moment you lift. Lift past about a third of the way, or flick, and it opens; stop short and it springs back |
+| swipe down, three fingers | the reverse, also following your fingers |
+| scroll sideways, two fingers | turns the cube; about 300 px of finger travel is one face, and any deliberate swipe moves at least one face |
+| mouse wheel notch, `Left` / `Right` | turn one face |
 | click a side face | turn it to the front |
-| click the front face, or `Enter` | go to that workspace |
+| click the front face, or `Enter` | go there; that face grows to fill the screen |
 | drag a window onto a face | move it there; you stay where you are. The cube **unfolds into a flat row** while you drag so every workspace is a drop target, and it turns when you drag near either side |
 | drop on the `+` face | move it to a new workspace |
-| `Esc`, click the background, 3-finger swipe down | close; it sinks back down |
+| `Esc`, click the background | close; your screen grows back to full size |
 
-It is a separate process, started when you open it and gone when you close it, so
-it costs nothing at rest. If it misbehaves, killing it is harmless: `kill -9` while
-open left Hyprland on the same PID with every window and the focused workspace
-intact, and a frozen overview is force-closed in about 1.4 s.
+It is a separate process, so killing it is harmless: `kill -9` while open left Hyprland
+on the same PID with every window and the focused workspace intact. A frozen one is
+force-closed in about 1.4 s.
+
+### Two tiers, because 8 GB is a hard constraint
+
+To follow your fingers from the first millimetre the overlay has to be **already
+running, hidden**, when you swipe. Starting one takes about 200 ms and a swipe lasts
+roughly 250 to 400. That is a standing memory cost, so there are two tiers, chosen by
+`scripts/overview/toggle.sh tier`:
+
+| | **full** (default) | **lite** |
+|---|---|---|
+| when | Game Mode off and memory comfortable | Game Mode on, **or** `MemAvailable` under 1.0 GiB |
+| process | resident, hidden, from login | **not running**; started when you swipe, gone when closed |
+| memory | ~236 MiB RSS hidden (137 MiB anonymous) | none while idle |
+| swipe | follows the fingers from the start | cannot follow the first ~200 ms, so it opens on release |
+| look | glass gradient, rim, turning sheen | flat glass, no sheen |
+| pictures | 1.3x, refreshed when you stop | 0.8x, taken once |
+| faces drawn | up to 4.6 either side | front plus one each side |
+| spring | slight overshoot | critically damped |
+
+**Downside, stated plainly:** lite is not in sync with the swipe, which is the whole
+point of full. It trades that for not holding memory against a game.
+
+How it switches, with no daemon: `game-mode.sh` stops the resident one on and starts
+it on off. While hidden, a resident instance re-reads `/proc/meminfo` every 15 s and
+quits itself under the low mark, and `toggle.sh resident` brings it back only above a
+higher mark (1.6 GiB) so it cannot flap. **Both marks are a first guess, not a
+measurement**: set `PRISM_LOW_KB` and `PRISM_HIGH_KB` once there is real data. Uses
+`MemAvailable`, which already counts reclaimable cache; `free` would trigger constantly
+on a machine that is meant to cache.
 
 ### How it is built
 
 | File | Does |
 |---|---|
-| `quickshell/overview/shell.qml` | state, the data, the spring, input, open and close, IPC hooks |
-| `quickshell/overview/WorkspaceCard.qml` | one glass face: its geometry, its window pictures, its drop target |
-| `scripts/overview/toggle.sh` | `open`, `close` or `toggle`; `-n` stops a second overlay stacking; escalates to `SIGKILL` for a frozen one |
-| `config/input.lua` | `hl.gesture` for three fingers up (open) and down (close) |
+| `quickshell/overview/shell.qml` | state machine, the swipe feed, the spring, open and close, the memory guard, IPC hooks |
+| `quickshell/overview/WorkspaceCard.qml` | one glass face: geometry, window pictures, drop target, lite switches |
+| `scripts/overview/toggle.sh` | `open` `close` `toggle` `resident` `stop` `tier`; picks the tier; escalates to `SIGKILL` for a frozen one |
+| `config/input.lua` | the three-finger up and down gestures, as `start` / `update` / `finish` callbacks |
+| `config/autostart.lua` | starts the resident instance at login |
 | `config/binds.lua` | `SUPER + O`, the way in without a touchpad |
+| `scripts/power/game-mode.sh` | stops the resident instance on, restores it off |
 
-**The motion is three numbers and nothing else.** `position` (which face is in
-front, sprung), `intro` (the rise from below) and `curve` (1 = cube, 0 = flat row).
-Every face is a binding on them, so scrolling costs one matrix per face per frame and
-no layout. Faces are moved with a transform, never by animating width or height.
+**The swipe is a file.** A plain `action = function() end` gesture fires once, when
+the swipe *ends*, which is why the overview used to appear only after it finished.
+`hl.gesture` also takes a table of callbacks, and each one appends a line to
+`$XDG_RUNTIME_DIR/prism/gesture` that the overlay reads with `tail -F`:
+
+```
+B up|down          a swipe began
+M <p>              progress, 0 (closed) to 1 (open); summed in Lua from per-event deltas
+F <cancelled> <v>  fingers lifted; v is progress per millisecond
+```
+
+Write to QML latency measured: median 0.65 ms, p95 1.7 ms (`FileView` with
+`watchChanges` was slower: 1.3 ms median). Spawning a process per event was ruled out
+(60 to 120 events a second), and so was a FIFO: opening one for writing blocks until a
+reader exists, which would hang the compositor. The Lua side checks the resident
+instance's pid file against `/proc`, and falls back to the old open-when-it-ends
+behaviour if there is none.
+
+**The picture of your screen** is a still captured the instant the swipe begins, so at
+progress 0 it is pixel-identical to what was there, bar included. It arrives 30 to 70
+ms after the swipe starts. Measured: it shows the desktop **without** the overlay,
+because the overlay has not been composited yet. A capture needs a *mapped* window; a
+hidden one never gets a frame (300 retries, nothing), so the overlay maps at the start
+of a swipe and Hyprland's own layer fade covers the first frames.
+
+**The motion is a few numbers.** `intro` (0 your screen at full size, 1 the cube is
+open) is your fingers, then a short settle; `expand` is the chosen face growing;
+`position` is which face is in front, sprung; `curve` is 1 for the cube and 0 for the
+flat row. Every face is a binding on them, so a frame costs one matrix per face and no
+layout. The faces swing from a flat row into the cube over the second half of the swipe.
 
 **The geometry is a regular prism seen from outside.** Face `i` sits at angle
 `(i - position) * 360/N` on a circle of radius `(cardW + gap) / (2 tan(step/2))`, so
 neighbours meet edge to edge. Unfolding is the same formula with the step going to 0,
-which sends the radius to infinity and lays the faces in a line, so the cube and the
-flat row are one family and not two code paths. The face is a real 4x4 perspective
-matrix: in a spike, a plain `Rotation` and a rotation-plus-scale hack both left gaps
-and edge-on slivers, and only the matrix made a true cube corner.
+which lays the faces in a line, so cube and flat row are one family. The face is a
+real 4x4 perspective matrix; in a spike a plain `Rotation` and a rotation-plus-scale
+hack both left gaps and slivers.
 
-**Size adapts to the screen:** half the width, but never taller than 60 percent of
-the height, so it fits a different monitor without edits. Type and corner radii scale
-with it.
+**Size adapts to the screen:** half the width, never taller than 60 percent of the
+height. Type and corner radii scale with it.
 
 **Glass, no blur.** The overlay paints the real wallpaper itself
-(`~/Pictures/Wallpaper/current_wallpaper`, the path `set-wallpaper.sh` keeps pointing
-at what `awww` shows) under translucent panes: a vertical gradient fill, a bright rim
-along the top edge, a soft sheen from the left whose strength follows how far the face
-has turned, so the glass glints as the cube rotates. No shader, no `MultiEffect`, no
-compositor blur pass. The wallpaper covers the windows behind, so no window text
-bleeds through.
+(`~/Pictures/Wallpaper/current_wallpaper`) under translucent panes: a gradient fill, a
+bright rim along the top, and a sheen whose strength follows how far the face has
+turned. No shader, no compositor blur pass. The wallpaper is reloaded each time the
+overlay goes away, so the next open shows the current one.
 
 ### Measured
 
-All repeatable, on the 8 GB Intel-iGPU laptop, with the test hooks below.
+On the 8 GB Intel-iGPU laptop, with the test hooks below.
 
 | | result |
 |---|---|
-| launch to first motion | 196 ms; fully settled 500 ms |
-| spring (a 2-face turn) | arrives in 225-244 ms, overshoots by 2.3 percent, settled in about 400 ms |
-| render work per frame | median 0 ms, p95 0 ms, max 2-5 ms; 0.8-1.2 percent of frames present a few ms late |
-| CPU at rest, and after a scroll | 0 percent |
-| CPU while scrolling | 17 percent (animating any full-screen layer at 60 fps measured 14-15 percent in a spike) |
-| RSS while open | 171-186 MiB (the old flat version: 161) |
-| frames drawn while idle | none: a scripted scroll recorded 246 frames, against about 620 when live capture ran |
-
-The animation tuning in `shell.qml` (`spring 3.2, damping 0.32`) came from measuring,
-not guessing: 3.0 / 0.36 had no overshoot at all and arrived in 374 ms, 3.2 / 0.28
-overshot by 6.3 percent.
+| swipe begins to first frame | about 20 ms (resident); picture of the screen 30-70 ms |
+| hidden, resident | 236 MiB RSS = 137 MiB anonymous + 99 MiB file-backed (shared libraries the kernel can drop). **Higher than my pre-measurement estimate of 110-170 MiB** |
+| CPU hidden or open and still | 0 percent |
+| CPU while scrolling | 10-21 percent (animating any full-screen layer at 60 fps measured 14-15 percent in an earlier spike) |
+| late frames in a scripted scroll | 2 of 228 (>20 ms) |
+| close of a frozen instance | 1.4 s, process gone |
+| `MALLOC_ARENA_MAX=1` | -43 MiB hidden (238 to 195 MiB in a first test); Qt allocates from several threads and each arena keeps what it freed |
+| lite, open | 241 MiB: lite saves its standing cost, not its working set |
 
 ### Test hooks
 
-`qs ipc -c overview call overview <fn>`: `state`, `goto <i>`, `flat <true|false>`,
-`faceAt <x> <y>`, `dump`, `demo`, `close`. `OVERVIEW_TRACE=1` logs position and intro per
-frame; `QSG_RENDER_TIMING=1` logs scene-graph frame times (it inflates CPU, so do not
-read CPU with it on). These exist so the motion can be measured without a touchpad.
+`qs ipc -c overview call overview <fn>`: `state`, `swipe "<line>"` (feeds a line to the
+gesture reader exactly as the file would, so a swipe can be scripted without a
+touchpad), `reveal`, `conceal`, `toggleShow`, `select`, `goto <i>`, `flat <bool>`,
+`faceAt <x> <y>`, `dump`, `demo`, `quit`. `OVERVIEW_TRACE=1` logs `begin`, `sheet`,
+`firstframe`, every `intro` and `pos` change, late frames and every wheel event;
+`QSG_RENDER_TIMING=1` logs scene-graph frame times (it inflates CPU, so do not read CPU
+with it on).
 
 ### Traps, because each cost real time
 
+- **The callback field is `finish`, not `end`.** Read from Hyprland's `hl.gesture`
+  parser. `start` and `update` receive `delta` **per event**, so the sum is kept in Lua.
+  Gesture direction is picked from the first ~5 units, so a very diagonal start can be
+  taken for the horizontal workspace swipe. That one needs a real touchpad to judge.
+- **`qs ipc call overview show` does not call `show`.** `qs` reads it itself, prints the
+  function list and returns 0. Measured. The functions are `reveal` and `conceal`.
 - **Qt clips anything outside a tiny depth range.** The matrix's true depth runs to
-  hundreds of pixels, and the GPU cut everything outside about +-1, so each side face
-  survived as a ~15 px sliver at the hinge. A bigger cube made it worse, which is why a
-  440 px test cube looked fine. Fix: scale only the matrix's **z output** by 0.001; x, y
-  and the perspective divide still use the true z, so the shape is unchanged. Proved in
-  a spike: unscaled, slivers; scaled, whole 60 degree panes.
+  hundreds of pixels and the GPU cut everything outside about +-1, so each side face
+  survived as a ~15 px sliver at the hinge. Fix: scale only the matrix's **z output**
+  by 0.001; x, y and the perspective divide still use the true z. A bigger cube made it
+  worse, which is why a 440 px test cube looked fine.
 - **The window must be opaque from creation.** A window created transparent has an alpha
   buffer, and Hyprland blended the desktop through it at about 10-12 percent: a terminal
-  underneath showed as a faint oversized ghost of its text across the overlay. It hid
-  whenever a dark window or a busy wallpaper was underneath, so it was missed at first.
-  Qt fixes the alpha buffer at creation, so changing `color` later does nothing, and a
-  solid black underlay did not help. Only an opaque-from-creation window removed it,
-  confirmed with a probe terminal printing a recognisable line. The overview cannot
-  crossfade itself, so it is mapped only when ready and **Hyprland's own `layersIn` /
-  `layersOut` fade** does the crossfade from your desktop.
-- **I blamed the wrong thing first.** The ghost was initially pinned on
-  `ScreencopyView.constraintSize`, which was in place when it appeared. It was not: the
-  ghost appeared with and without it. `constraintSize` (1.3x the drawn size) is a clean
-  win, about 33 MiB less, with equally sharp text.
+  underneath showed as a faint oversized ghost of its text. Qt fixes the alpha buffer at
+  creation, so changing `color` later does nothing, and a black underlay did not help.
+  Re-verified with the resident show/hide cycle: with a probe terminal printing a known
+  line, the margins of the open overlay differ from a no-probe run by 0.000 (0 pixels
+  over 8 in three regions).
+- **I blamed the wrong thing first.** The ghost was pinned on `constraintSize`, which was
+  in place when it appeared. It was not the cause. `constraintSize` (1.3x the drawn size)
+  is a clean win, about 33 MiB less, with equally sharp text.
 - **Live window capture costs 15-18 percent of a core while nothing moves**, against 0
-  for stills, because it streams a frame every refresh whether or not the window changed.
-  Pictures are stills, and the face you stop on is refreshed once.
+  for stills. Pictures are stills, and the face you stop on is refreshed once.
 - **Late frames are not caused by live capture starting mid-scroll.** That was a guess:
-  deferring live capture until rest did not change the late-frame rate, so it was
-  reverted. The overview's own work per frame is about nothing (`polish` and `sync` are
-  0 ms in 651 of 652 frames); the few late frames are on the present path.
+  deferring it did not change the late-frame rate. The overlay's own work per frame is
+  about nothing; the few late frames are on the present path.
 - **Quickshell's Hyprland module cannot be trusted for workspace identity on 0.57.**
   `HyprlandWorkspace.id` is `-1` for every workspace, and so is every window's workspace
   id. Layout comes from `hyprctl clients -j`, `workspaces -j` and `monitors -j`. Addresses
   also differ: `hyprctl` prints `0x55ae...`, Quickshell has no `0x`.
-- **A window move follows the window.** `hl.dsp.window.move({ workspace = 5, window =
-  "address:..." })` took the focus from 1 to 5. Pass `follow = false` for the silent move.
+- **A window move follows the window.** Pass `follow = false` for the silent move.
 - **`ScreencopyView.captureFrame()` fails if called at once** (`no recording context is
-  ready`). It retries every 120 ms until a picture arrives, capped at 25 tries.
+  ready`), so it retries. Setting `captureSource` to null frees the picture and makes the
+  next open capture a new one rather than show the last.
+- **A touchpad swipe used to snap straight back.** Read from the code, not yet confirmed on
+  a touchpad: the old handler moved the cube `delta / (0.85 * cardW)` faces, about 800 px
+  per face, and on lift rounded to the nearest face, so an ordinary swipe moved under half
+  a face and rounded to where it started. It now takes about 300 px per face and a swipe
+  of more than 0.1 face moves at least one. **If it still does not scroll,** run
+  `OVERVIEW_TRACE=1` and send the `TRACE wheel` lines; they show whether events arrive at
+  all and in what shape.
 - **A frozen process ignores polite signals.** `timeout 1` alone only sends SIGTERM and
   `qs kill` is also polite, so a stopped overview took 31 seconds and stayed alive. The
-  script now asks over IPC with `timeout -k`, waits for the animation, then `SIGKILL`s by
-  pid.
+  script asks over IPC with `timeout -k`, then `SIGKILL`s by pid.
 - **`pkill -f` matches its own shell.** Match on the process name, or close the window
   through Hyprland.
+
+### Needs the touchpad, and a number to tune
+
+Not verifiable by an agent: that the swipe fires the callbacks and the up/horizontal
+direction pick, the **feel**, and the touchpad scroll. Starting guesses, all unverified:
+`DIST = 300` in `config/input.lua` (how far the fingers travel for a full open),
+`fast = 0.0015` in `shell.qml` `release()` (what counts as a flick), the settle times,
+and `spring: 3.2, damping: 0.32`.
 
 ### Native overview coming
 

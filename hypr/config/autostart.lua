@@ -26,6 +26,11 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("wl-paste --type text --watch cliphist store")
     hl.exec_cmd("wl-paste --type image --watch cliphist store")
 
+    -- Prism (the workspace overview), resident and hidden so the three-finger
+    -- swipe can drive it from the first millimetre. toggle.sh declines when Game
+    -- Mode is on or memory is short; see scripts/overview/toggle.sh.
+    hl.exec_cmd(L.scripts .. "/overview/toggle.sh resident")
+
     -- Wallpaper Daemon
     hl.exec_cmd("awww-daemon")
     hl.exec_cmd(L.scripts .. "/wallpaper/awww-cycle.sh")
