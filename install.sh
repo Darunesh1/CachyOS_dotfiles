@@ -1655,6 +1655,30 @@ BINARIES
         row WARN "brightness floor" "no min_brightness set anywhere; SwayOSD falls back to its built-in default"
     fi
 
+    # Notification sounds. swaync plays nothing itself; every sound is a `scripts`
+    # entry running notify-sound.sh, and each link in that chain fails silently: a
+    # script that lost its execute bit, a player that is gone, a sound file that does
+    # not exist, or a config that no longer parses. All look identical to "no sound".
+    local ns_why=""
+    if ! jq -e '.scripts | length > 0' "$REPO/swaync/config.json" >/dev/null 2>&1; then
+        ns_why="swaync/config.json has no scripts block (or does not parse)"
+    elif [[ ! -x "$REPO/swaync/notify-sound.sh" ]]; then
+        ns_why="swaync/notify-sound.sh is missing or not executable"
+    elif ! command -v pw-play >/dev/null; then
+        ns_why="pw-play is not installed (pipewire)"
+    else
+        local ns_name
+        while read -r ns_name; do
+            [[ -f "/usr/share/sounds/freedesktop/stereo/${ns_name}.oga" ]] \
+                || { ns_why="sound '${ns_name}' not found in /usr/share/sounds/freedesktop/stereo (sound-theme-freedesktop)"; break; }
+        done < <(jq -r '.scripts[].exec | select(test("notify-sound.sh")) | split(" ")[1]' "$REPO/swaync/config.json")
+    fi
+    if [[ -z "$ns_why" ]]; then
+        row OK "notification sounds" "swaync scripts -> notify-sound.sh -> pw-play; silent under Do Not Disturb except critical"
+    else
+        row WARN "notification sounds" "$ns_why"
+    fi
+
     # The workspace overview is a chain, and any broken link makes the 3-finger
     # swipe silently do nothing: the quickshell binary, the config link, the
     # script the gesture calls, and the gesture itself. Test each, because a
@@ -1692,8 +1716,12 @@ BINARIES
     # of anonymous memory held against the game. Asked of the running system.
     local pr_tier pr_pid="" pr_comm=""
     pr_tier=$("$REPO/hypr/scripts/overview/toggle.sh" tier 2>&1 | tr '\n' ' ')
-    pr_pid=$(cat "${XDG_RUNTIME_DIR:-/tmp}/prism/pid" 2>/dev/null)
-    [[ "$pr_pid" =~ ^[0-9]+$ ]] && pr_comm=$(cat "/proc/$pr_pid/comm" 2>/dev/null)
+    # `|| true` on both reads: this script runs under `set -e`, and a stale pid file
+    # (the resident quit on low memory, or was killed) makes the second `cat` fail,
+    # which silently ended the WHOLE audit after the previous row. Found because the
+    # audit stopped printing rows partway through.
+    pr_pid=$(cat "${XDG_RUNTIME_DIR:-/tmp}/prism/pid" 2>/dev/null || true)
+    if [[ "$pr_pid" =~ ^[0-9]+$ ]]; then pr_comm=$(cat "/proc/$pr_pid/comm" 2>/dev/null || true); fi
     if [[ "$pr_tier" == *lite* ]]; then
         if [[ "$pr_comm" == qs ]]; then
             row WARN "prism resident" "running although the tier is lite (${pr_tier% lite *}); run: hypr/scripts/overview/toggle.sh stop"

@@ -19,6 +19,57 @@ waybar, or `swaync-client -t`).
 
 After editing: `swaync-client -R` (reload config, no restart needed).
 
+## Sounds
+
+swaync does **not** play sounds itself. Its `sound-name` and `sound-file` keys are only
+things a `scripts` entry can *match* on. The hook is the `scripts` block in
+`config.json`: each entry has an `exec` plus regex match fields (`app-name`, `summary`,
+`body`, `urgency`, `category`, `desktop-entry`, `sound-name`, `sound-file`), and
+**only the first matching entry runs**, so specific apps go above the catch-all.
+Source: `/etc/xdg/swaync/configSchema.json`.
+
+| entry | matches | plays |
+|---|---|---|
+| `kclock-silent` | `app-name` `Clock` (kclock's timer and alarm notifications) | nothing: kclock rings by itself |
+| `rencal-reminder` | `app-name` `rencal` (renCal's calendar reminders) | `alarm-clock-elapsed` |
+| `critical` | urgency critical | `dialog-warning`, **even under Do Not Disturb** |
+| `default` | everything else | `message-new-instant` |
+
+Each `exec` is `notify-sound.sh <name> [always]`, which plays
+`/usr/share/sounds/freedesktop/stereo/<name>.oga` with `pw-play`. The file path is full,
+not a theme name, so a missing theme cannot make it fail silently.
+
+- **Change a sound:** change the name in `config.json`. List them with
+  `ls /usr/share/sounds/freedesktop/stereo/`. Then `swaync-client -R`.
+- **Silence an app:** add an entry above `default` with its `app-name` and `"exec": "true"`.
+  Find an app's name with `dbus-monitor "interface='org.freedesktop.Notifications',member='Notify'"`.
+- **Quieter or louder:** it follows the system volume, `wpctl set-volume @DEFAULT_AUDIO_SINK@ 60%`.
+- **`script-fail-notify` is off.** It defaults on, and a failing script would then raise a
+  notification, which runs the script, which fails: a loop.
+
+**Do Not Disturb does not stop scripts.** Measured: with DND on, a normal notification
+still ran its script. Game Mode turns DND on, so `notify-sound.sh` checks
+`swaync-client -D` itself and stays quiet unless given `always` (the critical entry does,
+because swaync still shows critical notifications under DND). The sound follows the popup.
+
+**kclock** has its own sound and does not use swaync for it. `kclockd` plays
+`defaultAudioLocation` through its own audio stream (measured: a `kclockd` sink input
+appeared when a 4 s test timer finished), and that property is
+`/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga`, read from `kclockd` over
+D-Bus. Without the entry above, every kclock notification would beep **as well** as
+kclock's own alarm (also measured: the "Timer running" notification took the default
+sound). Change kclock's sound and volume inside the app, not here.
+
+**renCal** has no sound setting. Its `rencal-notifierd` service sends each reminder with
+`notify-send --app-name=rencal`, and the `rencal-reminder` entry is the whole mechanism.
+
+**kclockd starts at login by itself.** `/etc/xdg/autostart/org.kde.kclockd-autostart.desktop`
+becomes a user unit through the XDG autostart generator (checked after
+`systemctl --user daemon-reload`: `app-org.kde.kclockd-autostart@autostart.service`,
+`PartOf=xdg-desktop-autostart.target`), so an alarm set today still rings after a reboot.
+It was not running before only because kclock was installed after this session started. It
+costs about 35 MiB RSS (5 MiB anonymous).
+
 ## style.css is generated -- do not edit it here
 
 `style.css` in this directory is written by wallust from
