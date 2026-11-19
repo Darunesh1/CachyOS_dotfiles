@@ -1671,10 +1671,21 @@ BINARIES
         while read -r ns_name; do
             [[ -f "/usr/share/sounds/freedesktop/stereo/${ns_name}.oga" ]] \
                 || { ns_why="sound '${ns_name}' not found in /usr/share/sounds/freedesktop/stereo (sound-theme-freedesktop)"; break; }
-        done < <(jq -r '.scripts[].exec | select(test("notify-sound.sh")) | split(" ")[1]' "$REPO/swaync/config.json")
+        done < <(jq -r '.scripts[].exec | capture("notify-sound.sh (?<n>[a-z0-9-]+)") | .n' "$REPO/swaync/config.json")
+    fi
+    # The Snooze/Dismiss buttons are a second chain: config entry -> notify-actions.sh ->
+    # notify-send and busctl. Same silent failure (no buttons, nothing logged).
+    if [[ -z "$ns_why" ]]; then
+        if [[ ! -x "$REPO/swaync/notify-actions.sh" ]]; then
+            ns_why="swaync/notify-actions.sh is missing or not executable (no Snooze/Dismiss buttons)"
+        elif ! jq -e '.scripts | any(.[]; .exec | test("notify-actions.sh"))' "$REPO/swaync/config.json" >/dev/null 2>&1; then
+            ns_why="no swaync script calls notify-actions.sh (no Snooze/Dismiss buttons)"
+        elif ! jq -e '.scripts | to_entries | (map(.key) | index("actions-self")) < (map(.key) | index("kclock-timer"))' "$REPO/swaync/config.json" >/dev/null 2>&1; then
+            ns_why="the actions-self entry must come before the entries that call notify-actions.sh, or its own popup retriggers it"
+        fi
     fi
     if [[ -z "$ns_why" ]]; then
-        row OK "notification sounds" "swaync scripts -> notify-sound.sh -> pw-play; silent under Do Not Disturb except critical"
+        row OK "notification sounds" "swaync scripts -> notify-sound.sh -> pw-play (silent under Do Not Disturb except critical); notify-actions.sh gives timer/reminder buttons"
     else
         row WARN "notification sounds" "$ns_why"
     fi

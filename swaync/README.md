@@ -30,8 +30,10 @@ Source: `/etc/xdg/swaync/configSchema.json`.
 
 | entry | matches | plays |
 |---|---|---|
+| `actions-self` | `app-name` `notify-actions` (the helper's own popup) | nothing; must stay FIRST, see Buttons |
+| `kclock-timer` | `Clock` + summary `Timer complete` | nothing (kclock rings); runs `notify-actions.sh timer` |
 | `kclock-silent` | `app-name` `Clock` (kclock's timer and alarm notifications) | nothing: kclock rings by itself |
-| `rencal-reminder` | `app-name` `rencal` (renCal's calendar reminders) | `alarm-clock-elapsed` |
+| `rencal-reminder` | `app-name` `rencal` (renCal's calendar reminders) | `alarm-clock-elapsed`, and runs `notify-actions.sh reminder` |
 | `critical` | urgency critical | `dialog-warning`, **even under Do Not Disturb** |
 | `default` | everything else | `message-new-instant` |
 
@@ -69,6 +71,46 @@ becomes a user unit through the XDG autostart generator (checked after
 `PartOf=xdg-desktop-autostart.target`), so an alarm set today still rings after a reboot.
 It was not running before only because kclock was installed after this session started. It
 costs about 35 MiB RSS (5 MiB anonymous).
+
+## Buttons: Snooze and Dismiss
+
+swaync draws a button for every **non-default** action a notification carries (measured:
+a `notify-send -A snooze=Snooze -A dismiss=Dismiss` test showed two buttons). The two
+alarm-like notifications here carry none, which was measured with `dbus-monitor` on the
+`Notify` call:
+
+- **kclock "Timer complete"**: one action, `default` labelled "Dismiss". `default` means
+  "click the body", so no button is drawn.
+- **renCal reminder**: one action, `default` "Open event". renCal has no snooze at all
+  (no key in `config.toml`, no string in the binary).
+
+swaync cannot add a button to another app's notification, so `notify-actions.sh` sends a
+**second popup of its own** (`app-name` `notify-actions`) with real buttons, waits for the
+click with `notify-send --wait`, and acts on it:
+
+| popup | button | does |
+|---|---|---|
+| kclock timer | Dismiss | `dismiss` over D-Bus on every `/Timers/*` object whose `ringing` is true, then closes the original |
+| renCal reminder | Snooze 10 min | closes the original and schedules `systemd-run --user --on-active=10m notify-send --app-name=rencal ...`; it comes back through the normal path, so it plays the sound and gets buttons again |
+| renCal reminder | Dismiss | closes the original |
+
+Change the snooze length with `NOTIFY_SNOOZE_MIN` in the script. Verified: clicking Dismiss
+turned a ringing kclock timer from `ringing: b true` to `b false`; clicking Snooze made a
+transient timer unit with the right `notify-send` command line.
+
+Costs and limits:
+- **Two popups per event.** The helper's popup sits beside the original.
+- **A snoozed renCal reminder has no "Open event" click**, because the re-sent one is a
+  plain `notify-send`.
+- **One waiting `notify-send` per open popup**, gone when it is answered or closed. Closing
+  the popup with the X does nothing: a ringing kclock timer keeps ringing until Dismiss or
+  until you dismiss it in kclock.
+- **No snooze for kclock timers**: kclock has no such thing for timers (only alarms).
+- The helper detaches itself (`setsid -f`), because swaync waits for its scripts. The
+  reminder entry runs the helper BEFORE the sound: the alarm sound is about 8 s long, and
+  the buttons used to appear only after it.
+- **swaync runs scripts even under Do Not Disturb**, so a popup that cannot be seen still
+  waits. Harmless, but it is one idle process.
 
 ## style.css is generated -- do not edit it here
 

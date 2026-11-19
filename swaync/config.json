@@ -5,13 +5,22 @@
   "timeout-critical": 20,
   "script-fail-notify": false,
   "scripts": {
+    "actions-self": {
+      "app-name": "^notify-actions$",
+      "exec": "true"
+    },
+    "kclock-timer": {
+      "app-name": "^Clock$",
+      "summary": "^Timer complete$",
+      "exec": "$HOME/.config/swaync/notify-actions.sh timer"
+    },
     "kclock-silent": {
       "app-name": "^Clock$",
       "exec": "true"
     },
     "rencal-reminder": {
       "app-name": "^rencal$",
-      "exec": "$HOME/.config/swaync/notify-sound.sh alarm-clock-elapsed"
+      "exec": "$HOME/.config/swaync/notify-actions.sh reminder; $HOME/.config/swaync/notify-sound.sh alarm-clock-elapsed"
     },
     "critical": {
       "urgency": "Critical",
