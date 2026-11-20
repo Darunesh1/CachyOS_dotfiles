@@ -19,3 +19,4 @@ rofi/themes/colours.rasi
 hypr/config/display-mode.lua
 # Node crash dumps (e.g. from AI CLIs run in the repo)
 report.*.json
+hypr/plugins/prism/build/
