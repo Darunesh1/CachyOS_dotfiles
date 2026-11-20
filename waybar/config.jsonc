@@ -54,12 +54,15 @@
 
 	// ── Updates ──────────────────────────────────────────────────────────────────
 	// Requires: pacman-contrib  →  sudo pacman -S pacman-contrib
+	// Click: run-update.sh (pacman + AUR, stays open until Enter, refreshes this badge
+	// through signal 11, which is why a signal is declared here).
 	"custom/updates": {
 		"format": "󰚰 {}",
 		"exec": "$HOME/.config/waybar/scripts/updates.sh",
 		"return-type": "json",
 		"interval": 3600,
-		"on-click": "kitty -e sudo pacman -Syu",
+		"signal": 11,
+		"on-click": "kitty --title 'System update' -e $HOME/.config/waybar/scripts/run-update.sh",
 		"tooltip": true
 	},
 

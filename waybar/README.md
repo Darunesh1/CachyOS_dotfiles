@@ -51,7 +51,10 @@ To reload after a change: **SUPER + R**, or `./scripts/launch.sh`.
 - 🟢 Green = 1–10 pending
 - 🟡 Yellow = 11–30 pending
 - 🔴 Red = 31+ pending
-- **Click** to open a terminal with `sudo pacman -Syu`
+- **Click** opens a terminal running `scripts/run-update.sh`: `sudo pacman -Syu`, then `yay -Sua`
+  for AUR, then a summary (results, new `.pacnew` files, reboot hint). The window stays open
+  until you press Enter, and the badge refreshes itself (signal 11). Prompts are pacman's
+  and yay's own, answered with Enter for the default Yes.
   → Change `kitty` in config.jsonc to your terminal if needed
 
 ### WiFi

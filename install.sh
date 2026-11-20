@@ -1690,6 +1690,25 @@ BINARIES
         row WARN "notification sounds" "$ns_why"
     fi
 
+    # The update badge's click. Each link fails silently: a script that lost its execute
+    # bit makes the click open a terminal that closes at once, a click still pointing at
+    # the old `kitty -e sudo pacman -Syu` closes after the update and skips AUR, and a
+    # missing signal leaves the badge stale for an hour after updating.
+    local up_why="" up_cfg="$REPO/waybar/config.jsonc" up_sig
+    up_sig=$(grep -oE 'SIGNAL=[0-9]+' "$REPO/waybar/scripts/run-update.sh" 2>/dev/null | cut -d= -f2)
+    if [[ ! -x "$REPO/waybar/scripts/run-update.sh" ]]; then
+        up_why="waybar/scripts/run-update.sh is missing or not executable"
+    elif ! grep -q 'scripts/run-update.sh' "$up_cfg"; then
+        up_why="the updates click in waybar/config.jsonc does not run run-update.sh (the window would close at once and AUR is skipped)"
+    elif [[ -z "$up_sig" ]] || ! grep -qE "\"signal\":[[:space:]]*${up_sig}\b" "$up_cfg"; then
+        up_why="custom/updates has no \"signal\" matching SIGNAL in run-update.sh (the badge stays stale after an update)"
+    fi
+    if [[ -z "$up_why" ]]; then
+        row OK "update script" "badge click -> run-update.sh: pacman + AUR, stays open until Enter, refreshes the badge (signal ${up_sig})"
+    else
+        row WARN "update script" "$up_why"
+    fi
+
     # The workspace overview is a chain, and any broken link makes the 3-finger
     # swipe silently do nothing: the quickshell binary, the config link, the
     # script the gesture calls, and the gesture itself. Test each, because a
