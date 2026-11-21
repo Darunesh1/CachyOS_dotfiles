@@ -173,6 +173,8 @@ brightness restore.
 
 ## Workspace overview: Prism
 
+The native V3 prototype is documented in [plugins/prism/README.md](plugins/prism/README.md); the Quickshell implementation below remains the active fallback.
+
 > **Decision record:** [decisions/0007-workspace-overview-in-quickshell.md](../decisions/0007-workspace-overview-in-quickshell.md)
 > owns why this is a Quickshell client and not a Hyprland plugin, and the options
 > rejected. The feature is called **Prism**; its files and commands still say
