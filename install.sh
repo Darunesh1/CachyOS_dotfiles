@@ -1709,6 +1709,31 @@ BINARIES
         row WARN "update script" "$up_why"
     fi
 
+    # Prism V3, the native plugin. OPT-IN: a flag file turns it on, and a plugin that
+    # was built for another Hyprland refuses to load, so the swipe silently falls back
+    # to Quickshell and nobody knows why it feels different. Say so here.
+    local pn_flag="$CONFIG_HOME/hypr/prism-native" pn_so="$REPO/hypr/plugins/prism/build/prism.so"
+    local pn_built pn_running
+    if [[ ! -f "$REPO/hypr/config/prism_native.lua" ]]; then
+        row WARN "prism native plugin" "hypr/config/prism_native.lua is missing; input.lua requires it"
+    elif command -v luac >/dev/null && ! luac -p "$REPO/hypr/config/prism_native.lua" 2>/dev/null; then
+        row WARN "prism native plugin" "hypr/config/prism_native.lua has a syntax error; the swipe falls back to the old path"
+    elif [[ ! -f "$pn_flag" ]]; then
+        row OK "prism native plugin" "off (opt-in); the Quickshell Prism is live. Enable: make -C hypr/plugins/prism, then touch ~/.config/hypr/prism-native"
+    elif [[ ! -f "$pn_so" ]]; then
+        row WARN "prism native plugin" "opted in but not built; run: make -C $REPO/hypr/plugins/prism (Quickshell is used meanwhile)"
+    else
+        pn_built=$(readelf -p .prism_abi "$pn_so" 2>/dev/null | sed -nE 's/^[[:blank:]]*\[[[:blank:]]*0\][[:blank:]]*([^[:blank:]]+)[[:blank:]]*$/\1/p')
+        pn_running=$(Hyprland --version-json 2>/dev/null | jq -r '.abiHash // empty' 2>/dev/null)
+        if [[ -z "$pn_built" || -z "$pn_running" ]]; then
+            row WARN "prism native plugin" "could not read the plugin or Hyprland ABI; rebuild: make -C $REPO/hypr/plugins/prism"
+        elif [[ "$pn_built" != "$pn_running" ]]; then
+            row WARN "prism native plugin" "built for a different Hyprland (Hyprland updated?); rebuild: make -C $REPO/hypr/plugins/prism. Quickshell is used until then"
+        else
+            row OK "prism native plugin" "opted in, built for this Hyprland (ABI matches)"
+        fi
+    fi
+
     # The workspace overview is a chain, and any broken link makes the 3-finger
     # swipe silently do nothing: the quickshell binary, the config link, the
     # script the gesture calls, and the gesture itself. Test each, because a
