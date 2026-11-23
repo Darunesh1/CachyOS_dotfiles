@@ -1,5 +1,6 @@
 #include "content.hpp"
 
+#include <hyprland/src/state/WorkspaceState.hpp>
 #include <hyprland/src/desktop/state/WindowState.hpp>
 #include <hyprland/src/desktop/view/window/Window.hpp>
 #include <hyprland/src/desktop/view/window/WindowPresentation.hpp>
@@ -48,6 +49,18 @@ void drawWindow(Render::CRenderContext& ctx, const PHLWINDOW& window, const PHLM
 }
 
 } // namespace
+
+PHLWORKSPACE findWorkspace(WorkspaceId id) {
+    if (!State::workspaceState())
+        return nullptr;
+    for (const auto& ref : State::workspaceState()->workspaceRefs()) {
+        const auto workspace = ref.lock();
+        const auto numbered = workspace ? workspace->numberedID() : std::nullopt;
+        if (numbered && static_cast<WorkspaceId>(*numbered) == id)
+            return workspace;
+    }
+    return nullptr;
+}
 
 std::optional<FaceTexture> captureWorkspace(PHLWORKSPACE workspace) {
     if (!workspace || !workspace->numberedID() || !g_pHyprRenderer || g_pHyprRenderer->context().active() ||
@@ -119,7 +132,57 @@ std::optional<FaceTexture> captureWorkspace(PHLWORKSPACE workspace) {
     auto texture = framebuffer->getTexture();
     if (!texture || !texture->ok())
         return std::nullopt;
-    return FaceTexture{*workspace->numberedID(), std::move(texture)};
+    return FaceTexture{static_cast<WorkspaceId>(*workspace->numberedID()), std::move(texture)};
+}
+
+void ContentCache::invalidateAll() noexcept {
+    for (auto& [id, meta] : meta_)
+        meta.dirty = true;
+}
+
+void ContentCache::drop(WorkspaceId id) noexcept {
+    std::erase_if(faces_, [id](const FaceTexture& face) { return face.workspace == id; });
+    meta_.erase(id);
+}
+
+void ContentCache::clear() noexcept {
+    faces_.clear();
+    meta_.clear();
+}
+
+void ContentCache::retain(std::span<const WorkspaceId> workspaces) {
+    std::vector<WorkspaceId> stale;
+    for (const auto& face : faces_)
+        if (std::ranges::find(workspaces, face.workspace) == workspaces.end())
+            stale.push_back(face.workspace);
+    for (const auto id : stale)
+        drop(id);
+}
+
+void ContentCache::refresh(std::span<const WorkspaceId> workspaces, std::optional<WorkspaceId> forced) {
+    retain(workspaces);
+
+    const auto now = std::chrono::steady_clock::now();
+    for (const auto id : workspaces) {
+        auto& meta = meta_[id];
+        const bool have = std::ranges::any_of(faces_, [id](const FaceTexture& f) { return f.workspace == id; });
+        if (have && !meta.dirty && forced != id && now - meta.captured < maxAge) {
+            ++stats_.reused;
+            continue;
+        }
+        auto captured = captureWorkspace(findWorkspace(id));
+        // A failed capture must not leave an old picture of a changed workspace.
+        std::erase_if(faces_, [id](const FaceTexture& face) { return face.workspace == id; });
+        if (!captured) {
+            ++stats_.failed;
+            meta.dirty = true;
+            continue;
+        }
+        faces_.push_back(std::move(*captured));
+        meta.captured = now;
+        meta.dirty = false;
+        ++stats_.captured;
+    }
 }
 
 } // namespace prism

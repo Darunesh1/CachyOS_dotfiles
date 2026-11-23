@@ -3,7 +3,7 @@ BUILD_DIR ?= build
 CXXFLAGS ?= -O2
 
 PLUGIN := $(BUILD_DIR)/prism.so
-OBJECTS := $(BUILD_DIR)/plugin.o $(BUILD_DIR)/core.o $(BUILD_DIR)/render.o
+OBJECTS := $(BUILD_DIR)/plugin.o $(BUILD_DIR)/core.o $(BUILD_DIR)/render.o $(BUILD_DIR)/content.o
 DEPS := $(OBJECTS:.o=.d)
 PACKAGES := hyprland lua
 

@@ -6,12 +6,14 @@ usage() {
 Usage: nested.sh --check
        nested.sh --lifecycle [--cycles COUNT] [PLUGIN]
        nested.sh --gesture [PLUGIN]
-       nested.sh --screenshot OUTPUT [PLUGIN]
+       nested.sh --screenshot OUTPUT [--windows] [PLUGIN]
 
 --check       Start an isolated Hyprland and verify its Wayland output.
 --lifecycle   Verify Prism load and unload on the same isolated instance.
 --gesture     Drive Prism's Lua callbacks and verify state before unloading.
 --screenshot  Open Prism and save a PNG of the nested output before unloading.
+--windows     With --screenshot: first open a red, green and blue window on workspaces
+              1, 2 and 3, so each face has distinct content.
 COUNT         1 to 100, default 10.
 PLUGIN        Path to a built shared object, default ../build/prism.so.
 OUTPUT        New file under /tmp, for example /tmp/prism-preview.png.
@@ -144,13 +146,46 @@ LUA
     expect_lua 'Prism gesture readback' "$code" 'held 0.40, reversed 0.30, wrapped and selected workspace 7 once'
 }
 
+# One solid-colour terminal per workspace, so every face has content that tells it apart.
+# The clients run inside the sandbox and connect to the nested compositor, not the host.
+open_test_windows() {
+    local -a colors=(c01818 18a030 2040d0)
+    local i count deadline
+    for i in 1 2 3; do
+        expect_lua "Workspace $i" "hl.dispatch(hl.dsp.focus({ workspace = $i })); return $i" "$i"
+        nested_ctl dispatch "hl.dsp.exec_cmd('kitty --config NONE --override background=#${colors[i-1]} --override confirm_os_window_close=0 --override hide_window_decorations=yes sleep 600')" >/dev/null \
+            || fail "could not start the test window on workspace $i"
+        deadline=$((SECONDS + 25))
+        while (( SECONDS < deadline )); do
+            count=$(nested_ctl -j clients | /usr/bin/jq -r 'length') || fail 'could not list nested windows'
+            [[ $count == "$i" ]] && break
+            /usr/bin/sleep 0.2
+        done
+        [[ $count == "$i" ]] || fail "test window $i did not appear (clients: $count)"
+    done
+    # Let the first frames of the new windows reach the compositor.
+    /usr/bin/sleep 1
+    printf 'Nested windows per workspace: %s\n' \
+        "$(nested_ctl -j clients | /usr/bin/jq -c '[.[] | {ws: .workspace.id, class}] | sort_by(.ws)')"
+}
+
 capture_nested() {
-    local output_name=$1 code
-    code=$(cat <<'LUA'
+    local output_name=$1 code front workspaces turn
+    if [[ ${PRISM_TEST_WINDOWS-0} == 1 ]]; then
+        open_test_windows
+        front=2
+        turn=true
+        workspaces='{1, 2, 3}'
+    else
+        front=1
+        turn=false
+        workspaces='{1, 2, 3, 4}'
+    fi
+    code=$(cat <<LUA
 local prism = hl.plugin.prism
 assert(prism.reset())
-assert(prism.setWorkspaces({1, 2, 3, 4}))
-assert(prism.begin("up", 1))
+assert(prism.setWorkspaces($workspaces))
+assert(prism.begin("up", $front))
 assert(prism.update(0, -160, 0.12))
 assert(prism.finish(false, 0))
 for _ = 1, 120 do
@@ -161,20 +196,25 @@ for _ = 1, 120 do
 end
 local state = prism.snapshot()
 assert(state.openness == 1 and not state.animating, "Prism did not finish opening")
-assert(state.frontWorkspace == 1, "workspace 1 is not in front")
+assert(state.frontWorkspace == $front, "workspace $front is not in front")
+if $turn then
+    -- Hold a sideways swipe half way, so the neighbouring faces are on screen.
+    assert(prism.begin("horizontal", $front))
+    assert(prism.update(110, 0, 0.1))
+end
 return state.phase
 LUA
     )
     expect_lua 'Prism before capture' "$code" open
     local counters
-    counters=$(nested_ctl repl 'local d=hl.plugin.prism.renderDiagnostics(); return string.format("stage=%d noctx=%d locked=%d closed=%d attempted=%d candidates=%d ready=%d enqueued=%d drawn=%d", d.stage, d.missingContext, d.lockedContext, d.closedState, d.attempted, d.candidates, d.ready, d.enqueued, d.drawn)') \
+    counters=$(nested_ctl repl 'local d=hl.plugin.prism.renderDiagnostics(); return string.format("stage=%d noctx=%d locked=%d closed=%d attempted=%d candidates=%d ready=%d enqueued=%d drawn=%d captured=%d failed=%d reused=%d", d.stage, d.missingContext, d.lockedContext, d.closedState, d.attempted, d.candidates, d.ready, d.enqueued, d.drawn, d.captured, d.captureFailed, d.reused)') \
         || fail 'could not read Prism render diagnostics before capture'
     printf 'Prism render diagnostics before capture: %s\n' "$counters"
     WAYLAND_DISPLAY="$XDG_RUNTIME_DIR/$child_socket" \
         /usr/bin/timeout 10s /usr/bin/grim -t png -o "$output_name" - >&3 3>&- \
         || fail 'could not capture the nested output with grim'
     expect_lua 'Prism after capture' 'return hl.plugin.prism.snapshot().phase' open
-    counters=$(nested_ctl repl 'local d=hl.plugin.prism.renderDiagnostics(); return string.format("stage=%d noctx=%d locked=%d closed=%d attempted=%d candidates=%d ready=%d enqueued=%d drawn=%d", d.stage, d.missingContext, d.lockedContext, d.closedState, d.attempted, d.candidates, d.ready, d.enqueued, d.drawn)') \
+    counters=$(nested_ctl repl 'local d=hl.plugin.prism.renderDiagnostics(); return string.format("stage=%d noctx=%d locked=%d closed=%d attempted=%d candidates=%d ready=%d enqueued=%d drawn=%d captured=%d failed=%d reused=%d", d.stage, d.missingContext, d.lockedContext, d.closedState, d.attempted, d.candidates, d.ready, d.enqueued, d.drawn, d.captured, d.captureFailed, d.reused)') \
         || fail 'could not read Prism render diagnostics'
     printf 'Prism render diagnostics: %s\n' "$counters"
 }
@@ -301,6 +341,7 @@ mode=${1-}
 cycles=0
 plugin_mount=()
 screenshot_output=
+test_windows=0
 case $mode in
     --check)
         [[ $# == 1 ]] || fail 'usage: nested.sh --check'
@@ -329,6 +370,10 @@ case $mode in
                 || fail "screenshot path already exists: $screenshot_output"
             [[ -x /usr/bin/grim && -x /usr/bin/file ]] || fail 'grim and file are required for screenshots'
             shift
+            if [[ ${1-} == --windows ]]; then
+                test_windows=1
+                shift
+            fi
         fi
         [[ $# -le 1 ]] || fail "extra arguments for $mode, see --help"
         script_path=$(/usr/bin/realpath -e -- "$0")
@@ -384,7 +429,7 @@ sandbox=(/usr/bin/bwrap \
     --chdir /run/prism/home --setenv PATH /usr/bin --setenv HOME /run/prism/home \
     --setenv XDG_RUNTIME_DIR /run/prism --setenv WAYLAND_DISPLAY /run/prism-parent \
     --setenv HYPRLAND_NO_RT 1 --setenv HYPRLAND_NO_SD_VARS 1 --setenv HYPRLAND_NO_SD_NOTIFY 1 \
-    --setenv GSETTINGS_BACKEND memory -- \
+    --setenv GSETTINGS_BACKEND memory --setenv PRISM_TEST_WINDOWS "$test_windows" -- \
     /usr/bin/bash /prism-test/nested.sh --inside "$mode" "$cycles")
 
 if [[ $mode != --screenshot ]]; then
@@ -399,3 +444,19 @@ trap '/usr/bin/rm -f -- "$screenshot_temp"' EXIT
 /usr/bin/ln -T -- "$screenshot_temp" "$screenshot_output" \
     || fail "could not publish screenshot to $screenshot_output"
 printf 'Saved nested Prism screenshot to %s\n' "$screenshot_output"
+if [[ $test_windows == 1 ]]; then
+    # Content gate: the front face must show workspace 2's green window and a side
+    # face workspace 1's red one. A flat placeholder pane has neither.
+    /usr/bin/python3 -I - "$screenshot_output" <<'PY' || fail 'the screenshot does not show the workspace windows on the faces'
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert('RGB')
+green = red = blue = 0
+for r, g, b in im.getdata():
+    if abs(r - 0x18) < 24 and abs(g - 0xa0) < 24 and abs(b - 0x30) < 24: green += 1
+    if abs(r - 0xc0) < 24 and abs(g - 0x18) < 24 and abs(b - 0x18) < 24: red += 1
+    if abs(r - 0x20) < 24 and abs(g - 0x40) < 24 and abs(b - 0xd0) < 24: blue += 1
+print(f'Face content pixels: green={green} red={red} blue={blue}')
+sys.exit(0 if green > 20000 and red > 2000 else 1)
+PY
+fi

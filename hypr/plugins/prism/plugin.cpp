@@ -1,3 +1,4 @@
+#include "content.hpp"
 #include "core.hpp"
 #include "render.hpp"
 
@@ -51,6 +52,8 @@ constexpr auto makeBuildAbi() {
 HANDLE pluginHandle = nullptr;
 prism::Core core;
 prism::FaceRenderer renderer;
+prism::ContentCache content;
+std::vector<CHyprSignalListener> invalidators;
 CHyprSignalListener renderListener;
 std::chrono::steady_clock::time_point lastFrame;
 std::uint64_t missingContext = 0;
@@ -92,7 +95,7 @@ void onRenderStage(const Event::SRenderStageEvent& event) {
         }
         lastFrame = now;
         const auto state = core.snapshot();
-        renderer.enqueue(event.context->get(), state, core.workspaces());
+        renderer.enqueue(event.context->get(), state, core.workspaces(), content.textures());
         if (state.animating && event.monitor && g_pHyprRenderer)
             g_pHyprRenderer->damageMonitor(event.monitor);
     } catch (...) {
@@ -145,6 +148,7 @@ int setWorkspaces(lua_State* state) noexcept {
             lua_pop(state, 1);
         }
         core.setWorkspaces(std::move(workspaces));
+        content.retain(core.workspaces());
         requestFrame();
     } catch (...) {
         return pushResult(state, false);
@@ -170,8 +174,17 @@ int begin(lua_State* state) noexcept {
         return pushResult(state, false);
 
     const auto accepted = core.begin(direction, lua_tointeger(state, 2));
-    if (accepted)
+    if (accepted) {
+        // Lua callbacks run outside the render pass, which captureWorkspace needs. The
+        // workspace the swipe starts on is always re-captured, so the front face is
+        // never an old picture of it.
+        try {
+            content.refresh(core.workspaces(), lua_tointeger(state, 2));
+        } catch (...) {
+            content.clear();
+        }
         requestFrame();
+    }
     return pushResult(state, accepted);
 }
 
@@ -243,7 +256,7 @@ int snapshot(lua_State* state) noexcept {
 
 int renderDiagnostics(lua_State* state) noexcept {
     const auto counters = prism::renderDiagnostics();
-    lua_createtable(state, 0, 6);
+    lua_createtable(state, 0, 12);
     lua_pushinteger(state, static_cast<lua_Integer>(counters.stage));
     lua_setfield(state, -2, "stage");
     lua_pushinteger(state, static_cast<lua_Integer>(missingContext));
@@ -262,6 +275,13 @@ int renderDiagnostics(lua_State* state) noexcept {
     lua_setfield(state, -2, "enqueued");
     lua_pushinteger(state, static_cast<lua_Integer>(counters.drawn));
     lua_setfield(state, -2, "drawn");
+    const auto stats = content.stats();
+    lua_pushinteger(state, static_cast<lua_Integer>(stats.captured));
+    lua_setfield(state, -2, "captured");
+    lua_pushinteger(state, static_cast<lua_Integer>(stats.failed));
+    lua_setfield(state, -2, "captureFailed");
+    lua_pushinteger(state, static_cast<lua_Integer>(stats.reused));
+    lua_setfield(state, -2, "reused");
     return 1;
 }
 
@@ -349,6 +369,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 
 APICALL EXPORT void PLUGIN_EXIT() {
     renderListener.reset();
+    invalidators.clear();
+    content.clear();
     renderer.reset();
     if (pluginHandle) {
         unregisterBindings(pluginHandle, luaBindings.size());
