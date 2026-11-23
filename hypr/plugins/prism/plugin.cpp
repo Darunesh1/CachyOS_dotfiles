@@ -1,6 +1,7 @@
 #include "content.hpp"
 #include "core.hpp"
 #include "render.hpp"
+#include "swipe.hpp"
 
 #include <hyprland/src/plugins/PluginAPI.hpp>
 #include <hyprland/src/state/MonitorState.hpp>
@@ -55,6 +56,10 @@ prism::Core core;
 prism::FaceRenderer renderer;
 prism::ContentCache content;
 std::vector<CHyprSignalListener> invalidators;
+std::vector<CHyprSignalListener> swipeListeners;
+prism::SwipeRouter swipeRouter;
+std::uint32_t lastSwipeMs = 0;
+std::uint64_t swipesOwned = 0;
 CHyprSignalListener renderListener;
 std::chrono::steady_clock::time_point lastFrame;
 std::uint64_t missingContext = 0;
@@ -87,6 +92,7 @@ void invalidate() noexcept {
 void resetAll() noexcept {
     try {
         core.reset();
+        swipeRouter.reset();
         content.clear();
         lastFrame = {};
     } catch (...) {
@@ -115,6 +121,52 @@ void requestFrame() noexcept {
     for (const auto& monitor : State::monitorState()->monitors())
         if (monitor)
             g_pHyprRenderer->damageMonitor(monitor);
+}
+
+// Three-finger swipes while the cube is open (see swipe.hpp). Hyprland drops a swipe
+// event whose `cancelled` flag is set before its own gesture code sees it, so setting it
+// for every event of an owned swipe keeps the real workspace swipe from also running.
+// Nothing here may throw into the compositor; on any error the swipe is not owned.
+void installSwipe() {
+    auto& swipe = Event::bus()->m_events.gesture.swipe;
+    swipeListeners.push_back(swipe.begin.listen([](IPointer::SSwipeBeginEvent e, Event::SCallbackInfo& info) {
+        try {
+            lastSwipeMs = e.timeMs;
+            if (!g_pSessionLockManager || g_pSessionLockManager->isSessionLocked()) {
+                swipeRouter.reset();
+                return;
+            }
+            if (swipeRouter.begin(core, e.fingers)) {
+                info.cancelled = true;
+                ++swipesOwned;
+            }
+        } catch (...) {
+            swipeRouter.reset();
+        }
+    }));
+    swipeListeners.push_back(swipe.update.listen([](IPointer::SSwipeUpdateEvent e, Event::SCallbackInfo& info) {
+        try {
+            const auto dt = e.timeMs > lastSwipeMs ? static_cast<double>(e.timeMs - lastSwipeMs) / 1000.0 : 0.0;
+            lastSwipeMs = e.timeMs;
+            if (swipeRouter.update(core, e.delta.x, e.delta.y, dt)) {
+                info.cancelled = true;
+                requestFrame();
+            }
+        } catch (...) {
+            swipeRouter.reset();
+        }
+    }));
+    swipeListeners.push_back(swipe.end.listen([](IPointer::SSwipeEndEvent e, Event::SCallbackInfo& info) {
+        try {
+            if (swipeRouter.end(core, e.cancelled)) {
+                info.cancelled = true;
+                lastFrame = {};
+                requestFrame();
+            }
+        } catch (...) {
+            swipeRouter.reset();
+        }
+    }));
 }
 
 void onRenderStage(const Event::SRenderStageEvent& event) {
@@ -391,11 +443,16 @@ int renderDiagnostics(lua_State* state) noexcept {
     lua_setfield(state, -2, "captureNsLast");
     lua_pushinteger(state, static_cast<lua_Integer>(captureNsMax));
     lua_setfield(state, -2, "captureNsMax");
+    // Swipes the plugin took over while the cube was open: 0 after you swiped means the
+    // events never reached it.
+    lua_pushinteger(state, static_cast<lua_Integer>(swipesOwned));
+    lua_setfield(state, -2, "swipesOwned");
     return 1;
 }
 
 int reset(lua_State* state) noexcept {
     core.reset();
+    swipeRouter.reset();
     lastFrame = {};
     requestFrame();
     return pushResult(state, true);
@@ -472,9 +529,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     try {
         renderListener = Event::bus()->m_events.render.stage.listen(onRenderStage);
         installInvalidators();
+        installSwipe();
     } catch (...) {
         renderListener.reset();
         invalidators.clear();
+        swipeListeners.clear();
         unregisterBindings(handle, luaBindings.size());
         pluginHandle = nullptr;
         throw;
@@ -485,6 +544,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 APICALL EXPORT void PLUGIN_EXIT() {
     renderListener.reset();
     invalidators.clear();
+    swipeListeners.clear();
+    swipeRouter.reset();
     content.clear();
     renderer.reset();
     if (pluginHandle) {

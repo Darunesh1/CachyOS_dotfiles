@@ -46,6 +46,14 @@ struct ProjectedFace {
     }
 };
 
+// Fraction of the output (width and height alike, so the screen's shape is kept)
+// the front face fills when fully open. Fewer workspaces get bigger faces. These
+// numbers are a starting guess, to be tuned by looking at it on the real screen.
+[[nodiscard]] inline double openFaceFraction(std::size_t workspaceCount) {
+    const double extra = workspaceCount > 2 ? static_cast<double>(workspaceCount - 2) : 0.0;
+    return std::clamp(0.72 - 0.035 * extra, 0.58, 0.72);
+}
+
 // Keep projection independent of compositor objects so geometry can be replayed
 // without a GL context. Results are sorted back to front for painter's order.
 inline std::vector<ProjectedFace> projectFaces(std::span<const WorkspaceId> workspaces,
@@ -55,7 +63,7 @@ inline std::vector<ProjectedFace> projectFaces(std::span<const WorkspaceId> work
         return visible;
 
     openness = std::clamp(openness, 0.0, 1.0);
-    const double size = 1 - 0.50 * openness;
+    const double size = 1 - (1 - openFaceFraction(workspaces.size())) * openness;
     const double pitch = size + 0.008 * openness;
     const auto count = workspaces.size();
     // Two opposite planes disappear edge-on halfway through a turn. Put each

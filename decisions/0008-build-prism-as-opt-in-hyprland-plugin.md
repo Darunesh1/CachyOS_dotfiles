@@ -47,3 +47,11 @@ The native plugin now renders real workspace content in perspective, is driven b
 * Whole-workspace rendering did not need private renderer entry points: `content.cpp` draws each workspace's mapped windows and subsurfaces into its own framebuffer, outside the render pass.
 * It stays **opt-in** (flag file) with the Quickshell Prism as the fallback. Not yet verified: physical touchpad feel, real-iGPU frame times, session lock and monitor unplug while open. Activation in the live compositor is the user's decision.
 * Two crashes and one silent failure came from the build setup, not the design (hidden visibility nulled Hyprland's globals; locking a weak-over-unique pointer aborts; a Wayland-backend nested test stalled whenever the host hid its window). That is the argument for keeping nested testing mandatory.
+
+## Update 2026-11-23 (live trial)
+
+First live trial: the plugin loads and works, but the cube could not be turned with the fingers and the faces looked small.
+
+* **Finger spin.** The core already had a horizontal turn; nothing fed it, and the three-finger horizontal swipe was still Hyprland's workspace swipe. The plugin now listens to Hyprland's cancellable `gesture.swipe.{begin,update,end}` events and owns a three-finger swipe from its first event to its last while the cube is fully open. The alternatives were a four-finger Lua gesture (no C++ risk, but a new gesture to learn and the real workspace still moves behind the cube) and leaving it as it was. Downside accepted: input handling now lives inside the compositor, and only a live trial can prove the cancel behaviour.
+* **Size.** The front face was a fixed 50 %; it now adapts to the workspace count (72 % down to 58 %).
+

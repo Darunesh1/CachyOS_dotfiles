@@ -10,6 +10,7 @@ From the repository root:
 make -C hypr/plugins/prism
 c++ -std=c++23 -O2 -Wall -Wextra -Wconversion -Wsign-conversion -Werror hypr/plugins/prism/core.cpp hypr/plugins/prism/tests/core_test.cpp -o /tmp/prism-core-test && /tmp/prism-core-test
 c++ -std=c++26 hypr/plugins/prism/tests/render_test.cpp -o /tmp/prism-render-test && /tmp/prism-render-test
+c++ -std=c++23 -O2 -Wall -Wextra -Wconversion -Wsign-conversion -Werror hypr/plugins/prism/core.cpp hypr/plugins/prism/tests/swipe_test.cpp -o /tmp/prism-swipe-test && /tmp/prism-swipe-test
 hypr/plugins/prism/tests/nested.sh --check
 hypr/plugins/prism/tests/nested.sh --lifecycle --cycles 20
 hypr/plugins/prism/tests/nested.sh --gesture
@@ -31,7 +32,13 @@ touch ~/.config/hypr/prism-native     # then SUPER + SHIFT + R to reload
 rm    ~/.config/hypr/prism-native     # back to the Quickshell Prism
 ```
 
-`hypr/config/prism_native.lua` loads it a moment after the config, takes the 3-finger swipe, and gives you Left/Right (turn), Return (choose), Escape (cancel) while the cube is open. **SUPER + SHIFT + O** is the kill switch. `./install.sh --check` has a "prism native plugin" row: it says "off", or warns when you are opted in but the build is missing or was made for another Hyprland (rebuild after every Hyprland update; a mismatched plugin refuses to load and Quickshell takes over).
+`hypr/config/prism_native.lua` loads it a moment after the config, takes the 3-finger swipe, and gives you Left/Right (turn), Return (choose), Escape (cancel) while the cube is open. **SUPER + SHIFT + O** is the kill switch.
+
+**Turning the cube with your fingers.** While the cube is fully open, a three-finger swipe is owned by the plugin (`swipe.hpp`, listeners in `plugin.cpp`): sideways turns the cube and snaps to a face, down closes it onto the front face, up does nothing. It listens to Hyprland's swipe events and cancels every event of such a swipe, so Hyprland's own workspace swipe does not also run. When the cube is closed, opening or closing, or the swipe has another finger count, the swipe is not touched. `hl.plugin.prism.renderDiagnostics().swipesOwned` counts the swipes taken: if it stays 0 after you swiped on an open cube, the events never reached the plugin. **Not verified:** the nested test cannot inject touchpad swipes, so the cancel behaviour itself is only proven by a live trial; the routing logic is unit-tested (`tests/swipe_test.cpp`, and it fails when the ownership rule is removed).
+
+**Face size** adapts to the number of workspaces (`openFaceFraction` in `render.hpp`): the open front face fills about 72 % of the screen with 2 workspaces, 68 % with 3, 65 % with 4, 61 % with 5 and 58 % with 6 or more, always in the screen's own shape. Downside: the size changes when a workspace opens or closes. The numbers are a first guess to be tuned by eye. With 3 or 4 workspaces the neighbours are edge-on or facing away (the sides of a cube), as they were at the old fixed 50 %, so only the front face shows until it turns; from 5 workspaces the two neighbours show beside it.
+
+**After rebuilding**, reload the config (SUPER + SHIFT + R): the plugin is loaded again from the new file. Do not rebuild while the plugin is loaded if you can avoid it. `./install.sh --check` has a "prism native plugin" row: it says "off", or warns when you are opted in but the build is missing or was made for another Hyprland (rebuild after every Hyprland update; a mismatched plugin refuses to load and Quickshell takes over).
 
 ## What was measured (nested, headless, 2026-11-23)
 

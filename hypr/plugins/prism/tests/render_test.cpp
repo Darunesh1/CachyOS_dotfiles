@@ -44,7 +44,8 @@ int main() {
           "closed workspace did not fill the output");
     auto open = projectFaces(ids, 1, 1);
     check(open.size() == 3 && open.back().workspace == 2, "back faces or draw order are incorrect");
-    check(near(open.back().point(0, 0).x, 0.25) && near(open.back().point(1, 1).y, 0.75),
+    // Six workspaces: the smallest adaptive size, 58 % of the output, centred.
+    check(near(open.back().point(0, 0).x, 0.21) && near(open.back().point(1, 1).y, 0.79),
           "open front face does not have the requested aspect and scale");
     const auto& next = *std::ranges::find(open, 16, &prism::ProjectedFace::workspace);
     check(next.point(0, 0).y < next.point(1, 0).y, "both edges of an angled face have the same perspective");
@@ -66,5 +67,30 @@ int main() {
             }
         }
     }
+    // Adaptive size: fewer workspaces, bigger front face; always centred, inside the
+    // output with room at the sides, and the two neighbours stay visible.
+    double previous = 1;
+    for (std::size_t n = 1; n <= 8; ++n) {
+        std::vector<prism::WorkspaceId> many(n);
+        for (std::size_t i = 0; i < n; ++i)
+            many[i] = static_cast<prism::WorkspaceId>(i + 1);
+        const auto fraction = prism::openFaceFraction(n);
+        check(fraction <= previous + 1e-12 && fraction >= 0.58 - 1e-12 && fraction <= 0.72 + 1e-12,
+              "face size is not monotone or left its bounds");
+        previous = fraction;
+        const auto frame = projectFaces(many, 0, 1);
+        const auto& front = *std::ranges::find(frame, 1, &prism::ProjectedFace::workspace);
+        const auto l = front.point(0, 0);
+        const auto r = front.point(1, 1);
+        check(near(r.x - l.x, fraction) && near(r.y - l.y, fraction), "front face is not the adaptive size");
+        check(near(l.x + r.x, 1) && near(l.y + r.y, 1), "front face is not centred");
+        check(l.x >= 0.1 && r.x <= 0.9, "front face leaves no room for its neighbours");
+        // With 3 or 4 faces the neighbours are edge-on or facing away (a cube's sides),
+        // as before this change; from 5 faces the two neighbours show beside the front.
+        if (n >= 5)
+            check(frame.size() == 3, "a neighbour face disappeared at the adaptive size");
+    }
+    check(prism::openFaceFraction(2) > prism::openFaceFraction(6), "fewer workspaces must give bigger faces");
+
     std::cout << "projection: identity, size, backface culling, painter order, perspective, wrapping, 1–6 faces passed\n";
 }
