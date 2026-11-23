@@ -20,4 +20,9 @@ The nested script requires an accessible parent Wayland socket, render node, and
 
 ## Current limits
 
-The gesture state core and Lua bridge have passed deterministic tests in an isolated nested compositor. Geometry projection tests pass for one through six faces. The first nested screenshot was uniformly dark despite the Lua state reporting open, so visible rendering has **not** passed. Inactive workspace content capture and invalidation are under investigation; `content.cpp` is not yet integrated into the build. Physical touchpad behavior, 60 FPS, stress, and live activation are unverified. See [issue #22](https://github.com/Darunesh1/CachyOS_dotfiles/issues/22) for the remaining gates.
+The gesture state core, Lua bridge, geometry and ten load/unload cycles pass in an isolated nested compositor. **Visible rendering now passes for one face** (placeholder pane, nested screenshot has 309 colours instead of one). Two bugs had made it fail, both measured with the render counters:
+
+1. `-fvisibility=hidden` gave the plugin its own null copy of Hyprland's `inline` globals (`g_pSessionLockManager`, `g_pHyprRenderer`), so every render hook saw a "locked session" (`lockedContext == stage`). The Makefile no longer sets it; `-fno-gnu-unique` stays so unload works.
+2. `g_pHyprRenderer->glBackend().lock()` aborts the compositor ("tried to lock a CWeakPointer over a CUniquePointer"): `glBackend()` is a weak pointer over Hyprland's unique pointer. Use `valid()` and `->` only. This crash is exactly why nothing may be loaded live untested.
+
+Still open: real workspace content on the faces (`content.cpp` is compiled but not wired in), invalidation, keyboard switching, cancel, lock/unplug cleanup, 60 FPS, stress, physical touchpad, and live activation. See [issue #22](https://github.com/Darunesh1/CachyOS_dotfiles/issues/22).

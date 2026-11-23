@@ -53,6 +53,9 @@ prism::Core core;
 prism::FaceRenderer renderer;
 CHyprSignalListener renderListener;
 std::chrono::steady_clock::time_point lastFrame;
+std::uint64_t missingContext = 0;
+std::uint64_t lockedContext = 0;
+std::uint64_t closedState = 0;
 
 void requestFrame() noexcept {
     if (!State::monitorState() || !g_pHyprRenderer)
@@ -63,13 +66,23 @@ void requestFrame() noexcept {
 }
 
 void onRenderStage(const Event::SRenderStageEvent& event) {
-    if (event.stage != RENDER_POST_WINDOWS || !event.context ||
-        !g_pSessionLockManager || g_pSessionLockManager->isSessionLocked())
+    if (event.stage != RENDER_POST_WINDOWS)
         return;
+    prism::noteRenderStage();
+    if (!event.context) {
+        ++missingContext;
+        return;
+    }
+    if (!g_pSessionLockManager || g_pSessionLockManager->isSessionLocked()) {
+        ++lockedContext;
+        return;
+    }
 
     const auto before = core.snapshot();
-    if (before.phase == prism::Phase::Closed)
+    if (before.phase == prism::Phase::Closed) {
+        ++closedState;
         return;
+    }
 
     try {
         const auto now = std::chrono::steady_clock::now();
@@ -212,7 +225,7 @@ const char* phaseName(prism::Phase phase) noexcept {
 
 int snapshot(lua_State* state) noexcept {
     const auto current = core.snapshot();
-    lua_createtable(state, 0, 6);
+    lua_createtable(state, 0, 9);
     lua_pushstring(state, phaseName(current.phase));
     lua_setfield(state, -2, "phase");
     lua_pushnumber(state, current.openness);
@@ -225,6 +238,30 @@ int snapshot(lua_State* state) noexcept {
     lua_setfield(state, -2, "originWorkspace");
     lua_pushboolean(state, current.animating);
     lua_setfield(state, -2, "animating");
+    return 1;
+}
+
+int renderDiagnostics(lua_State* state) noexcept {
+    const auto counters = prism::renderDiagnostics();
+    lua_createtable(state, 0, 6);
+    lua_pushinteger(state, static_cast<lua_Integer>(counters.stage));
+    lua_setfield(state, -2, "stage");
+    lua_pushinteger(state, static_cast<lua_Integer>(missingContext));
+    lua_setfield(state, -2, "missingContext");
+    lua_pushinteger(state, static_cast<lua_Integer>(lockedContext));
+    lua_setfield(state, -2, "lockedContext");
+    lua_pushinteger(state, static_cast<lua_Integer>(closedState));
+    lua_setfield(state, -2, "closedState");
+    lua_pushinteger(state, static_cast<lua_Integer>(counters.attempted));
+    lua_setfield(state, -2, "attempted");
+    lua_pushinteger(state, static_cast<lua_Integer>(counters.candidates));
+    lua_setfield(state, -2, "candidates");
+    lua_pushinteger(state, static_cast<lua_Integer>(counters.ready));
+    lua_setfield(state, -2, "ready");
+    lua_pushinteger(state, static_cast<lua_Integer>(counters.enqueued));
+    lua_setfield(state, -2, "enqueued");
+    lua_pushinteger(state, static_cast<lua_Integer>(counters.drawn));
+    lua_setfield(state, -2, "drawn");
     return 1;
 }
 
@@ -253,6 +290,7 @@ constexpr std::array luaBindings{
     LuaBinding{"finish", finish},
     LuaBinding{"tick", tick},
     LuaBinding{"snapshot", snapshot},
+    LuaBinding{"renderDiagnostics", renderDiagnostics},
     LuaBinding{"reset", reset},
     LuaBinding{"takeSelection", takeSelection},
 };

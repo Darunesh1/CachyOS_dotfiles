@@ -2,10 +2,18 @@
 
 #include <hyprland/src/render/Renderer.hpp>
 
+#include <atomic>
+
 namespace prism {
 namespace {
 
 constexpr char passName[] = "MyArchPrismFaces";
+std::atomic<std::uint64_t> stages = 0;
+std::atomic<std::uint64_t> attempts = 0;
+std::atomic<std::uint64_t> candidates = 0;
+std::atomic<std::uint64_t> ready = 0;
+std::atomic<std::uint64_t> enqueues = 0;
+std::atomic<std::uint64_t> draws = 0;
 
 struct DrawFace {
     SP<Render::ITexture> texture;
@@ -41,8 +49,11 @@ public:
     bool needsPrecomputeBlur(Render::CRenderContext&) override { return false; }
 
     std::vector<UP<IPassElement>> draw(Render::CRenderContext& ctx) override {
-        auto gl = g_pHyprRenderer->glBackend().lock();
-        if (!gl || !ctx.m_data.pMonitor || ctx.m_data.damage.empty())
+        ++draws;
+        // A weak pointer over Hyprland's unique pointer: lock() asserts and aborts the
+        // compositor. Use valid() and operator-> only.
+        const auto gl = g_pHyprRenderer->glBackend();
+        if (!gl.valid() || !ctx.m_data.pMonitor || ctx.m_data.damage.empty())
             return {};
 
         const auto size = ctx.m_data.pMonitor->m_transformedSize;
@@ -66,8 +77,15 @@ private:
 
 } // namespace
 
+void noteRenderStage() noexcept { ++stages; }
+
+RenderDiagnostics renderDiagnostics() noexcept {
+    return {stages.load(), attempts.load(), candidates.load(), ready.load(), enqueues.load(), draws.load()};
+}
+
 void FaceRenderer::enqueue(Render::CRenderContext& ctx, const Snapshot& state,
                            std::span<const WorkspaceId> workspaces, std::span<const FaceTexture> textures) {
+    ++attempts;
     if (state.phase == Phase::Closed || state.openness <= 0 || !ctx.m_data.pMonitor ||
         ctx.m_renderingCapture || ctx.m_renderingSnapshot || ctx.m_mode != Render::RENDER_MODE_NORMAL ||
         &Render::IHyprRenderer::currentPass(ctx) != &ctx.m_pass || !g_pHyprRenderer->glBackend())
@@ -75,6 +93,7 @@ void FaceRenderer::enqueue(Render::CRenderContext& ctx, const Snapshot& state,
 
     std::vector<DrawFace> faces;
     for (const auto& face : projectFaces(workspaces, state.facePosition, state.openness)) {
+        ++candidates;
         const auto it = std::ranges::find(textures, face.workspace, &FaceTexture::workspace);
         auto tex = it != textures.end() ? it->texture : nullptr;
         if (!tex || !tex->ok() || tex->m_transform != HYPRUTILS_TRANSFORM_NORMAL) {
@@ -86,9 +105,13 @@ void FaceRenderer::enqueue(Render::CRenderContext& ctx, const Snapshot& state,
             }
             tex = pane_;
         }
-        if (tex && tex->ok())
+        if (tex && tex->ok()) {
+            ++ready;
             faces.push_back({std::move(tex), mesh(face)});
+        }
     }
+    if (!faces.empty())
+        ++enqueues;
     if (!faces.empty())
         Render::IHyprRenderer::addPassElement(ctx, makeUnique<FacePass>(std::move(faces), state.openness));
 }

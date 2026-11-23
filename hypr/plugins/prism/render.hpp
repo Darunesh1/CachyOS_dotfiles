@@ -5,6 +5,7 @@
 #include <hyprutils/memory/SharedPtr.hpp>
 
 #include <algorithm>
+#include <cstdint>
 #include <cmath>
 #include <numbers>
 #include <span>
@@ -15,6 +16,18 @@ class ITexture;
 }
 
 namespace prism {
+
+struct RenderDiagnostics {
+    std::uint64_t stage = 0;
+    std::uint64_t attempted = 0;
+    std::uint64_t candidates = 0;
+    std::uint64_t ready = 0;
+    std::uint64_t enqueued = 0;
+    std::uint64_t drawn = 0;
+};
+
+void noteRenderStage() noexcept;
+[[nodiscard]] RenderDiagnostics renderDiagnostics() noexcept;
 
 struct ProjectedPoint {
     double x, y; // Monitor coordinates normalized to the interval [0, 1].

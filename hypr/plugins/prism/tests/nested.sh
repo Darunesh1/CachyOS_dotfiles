@@ -166,10 +166,17 @@ return state.phase
 LUA
     )
     expect_lua 'Prism before capture' "$code" open
+    local counters
+    counters=$(nested_ctl repl 'local d=hl.plugin.prism.renderDiagnostics(); return string.format("stage=%d noctx=%d locked=%d closed=%d attempted=%d candidates=%d ready=%d enqueued=%d drawn=%d", d.stage, d.missingContext, d.lockedContext, d.closedState, d.attempted, d.candidates, d.ready, d.enqueued, d.drawn)') \
+        || fail 'could not read Prism render diagnostics before capture'
+    printf 'Prism render diagnostics before capture: %s\n' "$counters"
     WAYLAND_DISPLAY="$XDG_RUNTIME_DIR/$child_socket" \
         /usr/bin/timeout 10s /usr/bin/grim -t png -o "$output_name" - >&3 3>&- \
         || fail 'could not capture the nested output with grim'
     expect_lua 'Prism after capture' 'return hl.plugin.prism.snapshot().phase' open
+    counters=$(nested_ctl repl 'local d=hl.plugin.prism.renderDiagnostics(); return string.format("stage=%d noctx=%d locked=%d closed=%d attempted=%d candidates=%d ready=%d enqueued=%d drawn=%d", d.stage, d.missingContext, d.lockedContext, d.closedState, d.attempted, d.candidates, d.ready, d.enqueued, d.drawn)') \
+        || fail 'could not read Prism render diagnostics'
+    printf 'Prism render diagnostics: %s\n' "$counters"
 }
 
 cleanup_nested() {

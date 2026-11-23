@@ -15,10 +15,14 @@ all: $(PLUGIN)
 $(PLUGIN): $(OBJECTS) Makefile
 	$(CXX) -Wl,--as-needed $(LDFLAGS) -shared -o $@ $(OBJECTS) $$($(PKG_CONFIG) --libs $(PACKAGES)) $(LDLIBS)
 
-# GCC's unique symbols can keep the module mapped after dlclose.
+# GCC's unique symbols can keep the module mapped after dlclose, so -fno-gnu-unique stays.
+# NOT -fvisibility=hidden: Hyprland's globals (g_pSessionLockManager, g_pHyprRenderer, ...)
+# are `inline` variables in its headers. Hidden visibility gives this plugin its OWN, null
+# copy instead of binding to Hyprland's, and every render hook then thinks the session is
+# locked (measured: nested diagnostics lockedContext == stage on every frame).
 $(BUILD_DIR)/%.o: %.cpp Makefile | $(BUILD_DIR)
 	$(PKG_CONFIG) --print-errors --exists $(PACKAGES)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -std=c++26 -fPIC -fvisibility=hidden -fno-gnu-unique \
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -std=c++26 -fPIC -fno-gnu-unique \
 		-MD -MP $$($(PKG_CONFIG) --cflags $(PACKAGES)) -c -o $@ $<
 
 $(BUILD_DIR):
