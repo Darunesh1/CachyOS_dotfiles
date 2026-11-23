@@ -8,6 +8,7 @@ Usage: nested.sh --check
        nested.sh --gesture [PLUGIN]
        nested.sh --screenshot OUTPUT [--windows] [PLUGIN]
        nested.sh --driver [PLUGIN]
+       nested.sh --safety [PLUGIN]
 
 --check       Start an isolated Hyprland and verify its Wayland output.
 --lifecycle   Verify Prism load and unload on the same isolated instance.
@@ -15,6 +16,9 @@ Usage: nested.sh --check
 --screenshot  Open Prism and save a PNG of the nested output before unloading.
 --driver      Open three windows, then drive Prism through hypr/config/prism_native.lua
               (swipe callbacks, keys submap, watcher, selection, watchdog reset).
+--safety      Open three windows, then abuse Prism while open: new window, workspace
+              removed, reset mid-animation, 40 fast open/close cycles, unload while
+              open. The nested compositor must stay alive and answer after each.
 --windows     With --screenshot: first open a red, green and blue window on workspaces
               1, 2 and 3, so each face has distinct content.
 COUNT         1 to 100, default 10.
@@ -285,6 +289,46 @@ return s.phase" opening
     expect_lua 'Driver reset' "_G.drv.reset(); return hl.plugin.prism.snapshot().phase" closed
 }
 
+alive() { expect_lua "Alive after $1" 'return 6 * 7' 42 >/dev/null; }
+
+test_safety() {
+    local i
+    open_test_windows
+    expect_lua 'Safety setup' "local p = hl.plugin.prism; assert(p.setWorkspaces({1, 2, 3})); assert(p.open(3)); return 'ok'" ok
+    wait_phase open
+
+    # A new window while open: invalidation listeners run inside the compositor.
+    nested_ctl dispatch "hl.dsp.exec_cmd('kitty --config NONE --override confirm_os_window_close=0 sleep 600')" >/dev/null \
+        || fail 'could not start an extra window'
+    /usr/bin/sleep 2
+    alive 'a window opened while open'
+
+    # A workspace that disappears from the list while the cube is open and then chosen.
+    expect_lua 'Workspace list shrinks' "local p = hl.plugin.prism; assert(p.setWorkspaces({1, 3})); assert(p.close(true)); return 'ok'" ok
+    wait_phase closed
+    nested_ctl repl 'hl.plugin.prism.takeSelection()' >/dev/null
+    alive 'a workspace left the list mid-open'
+
+    # Reset in the middle of the opening spring, and a second one with nothing open.
+    expect_lua 'Reset mid-animation' "local p = hl.plugin.prism; assert(p.setWorkspaces({1, 2, 3})); assert(p.open(1)); assert(p.tick(0.02)); assert(p.reset()); assert(p.reset()); return p.snapshot().phase" closed
+    alive 'reset in the middle of an animation'
+
+    # Fast cycling: a swipe starts again before the last one settled.
+    local reply select
+    for (( i = 1; i <= 40; ++i )); do
+        (( i % 2 == 0 )) && select=true || select=false
+        reply=$(nested_ctl repl "local p = hl.plugin.prism; p.setWorkspaces({1, 2, 3}); p.begin('up', 2); p.update(0, -120, 0.02); p.finish(false, -400); p.begin('down', 2); p.update(0, 60, 0.02); p.finish(true); p.tick(0.016); p.close($select); p.takeSelection(); return 'x'") \
+            || fail "fast cycle $i failed: $reply"
+    done
+    nested_ctl repl 'hl.plugin.prism.reset()' >/dev/null
+    alive '40 fast open/close cycles'
+    printf 'Safety diagnostics: %s\n' "$(nested_ctl repl 'local d=hl.plugin.prism.renderDiagnostics(); return string.format("captured=%d failed=%d reused=%d drawn=%d", d.captured, d.captureFailed, d.reused, d.drawn)')"
+
+    # Unload while OPEN: PLUGIN_EXIT must tear down faces, listeners and bindings.
+    expect_lua 'Open before unload' "local p = hl.plugin.prism; assert(p.setWorkspaces({1, 2, 3})); assert(p.open(2)); return 'ok'" ok
+    /usr/bin/sleep 0.5
+}
+
 cleanup_nested() {
     local result=$?
     local i
@@ -382,6 +426,7 @@ LUA
             --gesture) test_gestures ;;
             --screenshot) capture_nested "${monitor%% *}" ;;
             --driver) test_driver ;;
+            --safety) test_safety ;;
         esac
 
         reply=$(nested_ctl plugin unload "$plugin") || fail "cycle $cycle unload: $reply"
@@ -389,7 +434,7 @@ LUA
         plugins=$(nested_ctl -j plugin list) || fail "cycle $cycle: could not read unloaded plugins"
         /usr/bin/jq -e '. == []' <<<"$plugins" >/dev/null \
             || fail "cycle $cycle: expected an empty plugin list: $plugins"
-        if [[ $mode == --gesture || $mode == --screenshot || $mode == --driver ]]; then
+        if [[ $mode == --gesture || $mode == --screenshot || $mode == --driver || $mode == --safety ]]; then
             expect_lua 'Prism Lua namespace after unload' 'return type(hl.plugin.prism)' nil
         fi
         printf 'Cycle %s/%s on PID %s: [] -> [Prism] -> []\n' "$cycle" "$cycles" "$child_pid"
@@ -413,7 +458,7 @@ case $mode in
     --check)
         [[ $# == 1 ]] || fail 'usage: nested.sh --check'
         ;;
-    --lifecycle|--gesture|--screenshot|--driver)
+    --lifecycle|--gesture|--screenshot|--driver|--safety)
         shift
         cycles=1
         if [[ $mode == --lifecycle ]]; then

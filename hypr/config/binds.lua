@@ -185,6 +185,10 @@ hl.bind(mainMod .. " + down",  hl.dsp.focus({ direction = "down" }))
 
 
 -- ── Workspaces ──────────────────────────────────────────────────────────────
+-- Kill switch for the opt-in native Prism (see config/prism_native.lua): closes the
+-- cube at once, releases its key submap, and does nothing at all when it is not in use.
+hl.bind(mainMod .. " + SHIFT + O", function() require("config/prism_native").reset() end)
+
 -- Switch workspaces with mainMod + [0-9]
 hl.bind(mainMod .. " + 1", hl.dsp.focus({ workspace = 1 }))
 hl.bind(mainMod .. " + 2", hl.dsp.focus({ workspace = 2 }))

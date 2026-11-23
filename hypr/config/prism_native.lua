@@ -127,7 +127,13 @@ local function watch()
             local chosen = p.takeSelection()
             watching = false
             leave_keys()
-            if chosen and chosen ~= active_id() then
+            -- Only a workspace that still exists: focusing a number that was closed while
+            -- the cube was open would silently create an empty one.
+            local exists = false
+            for _, id in ipairs(workspace_ids()) do
+                if id == chosen then exists = true break end
+            end
+            if chosen and exists and chosen ~= active_id() then
                 hl.dispatch(hl.dsp.focus({ workspace = chosen }))
             end
             return

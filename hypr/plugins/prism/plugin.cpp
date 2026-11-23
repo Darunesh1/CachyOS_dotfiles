@@ -60,6 +60,37 @@ std::uint64_t missingContext = 0;
 std::uint64_t lockedContext = 0;
 std::uint64_t closedState = 0;
 
+// Everything below runs inside the compositor: nothing may throw out of it.
+void invalidate() noexcept {
+    content.invalidateAll();
+}
+
+// A monitor going away mid-swipe: drop pictures sized for it and close the overview.
+void resetAll() noexcept {
+    try {
+        core.reset();
+        content.clear();
+        lastFrame = {};
+    } catch (...) {
+    }
+}
+
+void installInvalidators() {
+    auto& events = Event::bus()->m_events;
+    invalidators.push_back(events.window.open.listen([](PHLWINDOW) { invalidate(); }));
+    invalidators.push_back(events.window.close.listen([](PHLWINDOW) { invalidate(); }));
+    invalidators.push_back(events.window.destroy.listen([](PHLWINDOWREF) { invalidate(); }));
+    invalidators.push_back(events.window.moveToWorkspace.listen([](PHLWINDOW, PHLWORKSPACE) { invalidate(); }));
+    invalidators.push_back(events.window.floating.listen([](PHLWINDOW) { invalidate(); }));
+    invalidators.push_back(events.window.fullscreen.listen([](PHLWINDOW) { invalidate(); }));
+    invalidators.push_back(events.workspace.createdLate.listen([](PHLWORKSPACEREF) { invalidate(); }));
+    invalidators.push_back(events.workspace.removed.listen([](PHLWORKSPACEREF) { invalidate(); }));
+    invalidators.push_back(events.monitor.destroyMon.listen([](PHLMONITOR) { resetAll(); }));
+    invalidators.push_back(events.monitor.removed.listen([](PHLMONITOR) { resetAll(); }));
+    // NOT monitor.layoutChanged: measured, it also fires when a window opens (the tiling
+    // layout changed), which closed the cube under the user's hands.
+}
+
 void requestFrame() noexcept {
     if (!State::monitorState() || !g_pHyprRenderer)
         return;
@@ -78,6 +109,10 @@ void onRenderStage(const Event::SRenderStageEvent& event) {
     }
     if (!g_pSessionLockManager || g_pSessionLockManager->isSessionLocked()) {
         ++lockedContext;
+        // A locked screen must never show the cube afterwards, nor keep its pictures
+        // (they would hold what was on screen when you locked it).
+        if (core.snapshot().phase != prism::Phase::Closed)
+            resetAll();
         return;
     }
 
@@ -399,7 +434,10 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     pluginHandle = handle;
     try {
         renderListener = Event::bus()->m_events.render.stage.listen(onRenderStage);
+        installInvalidators();
     } catch (...) {
+        renderListener.reset();
+        invalidators.clear();
         unregisterBindings(handle, luaBindings.size());
         pluginHandle = nullptr;
         throw;
