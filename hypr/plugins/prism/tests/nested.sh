@@ -9,6 +9,7 @@ Usage: nested.sh --check
        nested.sh --screenshot OUTPUT [--windows] [PLUGIN]
        nested.sh --driver [PLUGIN]
        nested.sh --safety [PLUGIN]
+       nested.sh --stress [PLUGIN]
 
 --check       Start an isolated Hyprland and verify its Wayland output.
 --lifecycle   Verify Prism load and unload on the same isolated instance.
@@ -16,6 +17,8 @@ Usage: nested.sh --check
 --screenshot  Open Prism and save a PNG of the nested output before unloading.
 --driver      Open three windows, then drive Prism through hypr/config/prism_native.lua
               (swipe callbacks, keys submap, watcher, selection, watchdog reset).
+--stress      100 real-time open/close cycles with three windows; reports memory growth,
+              idle cost while closed, frame time and capture time.
 --safety      Open three windows, then abuse Prism while open: new window, workspace
               removed, reset mid-animation, 40 fast open/close cycles, unload while
               open. The nested compositor must stay alive and answer after each.
@@ -153,6 +156,18 @@ LUA
     expect_lua 'Prism gesture readback' "$code" 'held 0.40, reversed 0.30, wrapped and selected workspace 7 once'
 }
 
+# The nested compositor draws only when the HOST shows its window (a Wayland client gets
+# frame callbacks only while visible). If you switch host workspace, or something covers
+# the window, it stops rendering and every animation looks hung. That is the test
+# environment, not the plugin, so say so instead of failing mysteriously.
+require_frames() {
+    local before after
+    before=$(nested_ctl repl 'hl.plugin.prism.reset(); return hl.plugin.prism.renderDiagnostics().stage') || fail 'could not read the frame counter'
+    /usr/bin/sleep 1
+    after=$(nested_ctl repl 'return hl.plugin.prism.renderDiagnostics().stage') || fail 'could not read the frame counter'
+    [[ $after -gt $before ]] || fail 'the nested compositor is not rendering frames: its window is not visible on the host (another host workspace is active, or it is covered). Keep the nested window visible and do not switch workspace while the test runs.'
+}
+
 # One solid-colour terminal per workspace, so every face has content that tells it apart.
 # The clients run inside the sandbox and connect to the nested compositor, not the host.
 open_test_windows() {
@@ -172,6 +187,7 @@ open_test_windows() {
     done
     # Let the first frames of the new windows reach the compositor.
     /usr/bin/sleep 1
+    require_frames
     printf 'Nested windows per workspace: %s\n' \
         "$(nested_ctl -j clients | /usr/bin/jq -c '[.[] | {ws: .workspace.id, class}] | sort_by(.ws)')"
 }
@@ -233,7 +249,7 @@ wait_phase() {
         [[ $phase == "$want" ]] && return 0
         /usr/bin/sleep 0.1
     done
-    fail "Prism did not reach phase $want (last: $phase)"
+    fail "Prism did not reach phase $want (last: $phase; $(nested_ctl repl 'local s = hl.plugin.prism.snapshot(); return string.format("openness=%.4f face=%.4f animating=%s front=%s origin=%s", s.openness, s.facePosition, tostring(s.animating), tostring(s.frontWorkspace), tostring(s.originWorkspace))' 2>&1); $(nested_ctl repl 'local d = hl.plugin.prism.renderDiagnostics(); return string.format("stage=%d frames=%d drawn=%d closedState=%d locked=%d", d.stage, d.frames, d.drawn, d.closedState, d.lockedContext)' 2>&1); after 1 s: $(/usr/bin/sleep 1; nested_ctl repl 'local d = hl.plugin.prism.renderDiagnostics(); return string.format("stage=%d frames=%d drawn=%d", d.stage, d.frames, d.drawn)' 2>&1))"
 }
 
 # The Lua driver the real config uses, run against the real plugin in the nested
@@ -329,6 +345,52 @@ test_safety() {
     /usr/bin/sleep 0.5
 }
 
+rss_kb() { /usr/bin/awk '/^VmRSS:/ {print $2}' "/proc/$child_pid/status"; }
+
+diag() {
+    nested_ctl repl "local d = hl.plugin.prism.renderDiagnostics(); return string.format('%d %d %d %d %d %d %d', d.frames, d.frameNsMean, d.frameNsMax, d.captureNsLast, d.captureNsMax, d.attempted, d.captureFailed)"
+}
+
+test_stress() {
+    local i rss0 rss1 rss2 d0 d1 frames mean max capl capm att failed
+    open_test_windows
+    expect_lua 'Stress setup' "assert(hl.plugin.prism.setWorkspaces({1, 2, 3})); return 'ok'" ok
+
+    # Idle cost: loaded but closed, the hook must do nothing: no frames drawn, no
+    # attempts. (It still sees the render stage; it returns at the Closed check.)
+    d0=$(diag)
+    /usr/bin/sleep 3
+    d1=$(diag)
+    read -r _ _ _ _ _ att _ <<<"$d1"
+    [[ $d0 == "$d1" ]] || fail "idle cost: counters moved while closed ($d0 -> $d1)"
+    printf 'Idle while closed for 3 s: counters unchanged (%s)\n' "$d1"
+
+    rss0=$(rss_kb)
+    for (( i = 1; i <= PRISM_STRESS_CYCLES; ++i )); do
+        nested_ctl repl "local p = hl.plugin.prism; assert(p.begin('up', 2)); p.update(0, -180, 0.05); p.finish(false, -600); return 'x'" >/dev/null \
+            || fail "stress cycle $i: could not open"
+        /usr/bin/sleep 0.25
+        [[ ${PRISM_STRESS_VERBOSE-} == 1 ]] && printf 'cycle %s after open: %s\n' "$i" "$(nested_ctl repl 'local s = hl.plugin.prism.snapshot(); local d = hl.plugin.prism.renderDiagnostics(); return string.format("%s open=%.3f anim=%s stage=%d frames=%d closedState=%d attempted=%d", s.phase, s.openness, tostring(s.animating), d.stage, d.frames, d.closedState, d.attempted)')"
+        nested_ctl repl "local p = hl.plugin.prism; p.rotate(1); return 'x'" >/dev/null
+        /usr/bin/sleep 0.15
+        nested_ctl repl "local p = hl.plugin.prism; p.close($([[ $((i % 2)) == 0 ]] && echo true || echo false)); return 'x'" >/dev/null \
+            || fail "stress cycle $i: could not close"
+        /usr/bin/sleep 0.25
+        nested_ctl repl 'hl.plugin.prism.takeSelection() return 1' >/dev/null
+        (( i == 10 || i == PRISM_STRESS_CYCLES )) && rss1=${rss1:-$(rss_kb)}
+    done
+    wait_phase closed
+    /usr/bin/sleep 1
+    rss2=$(rss_kb)
+    read -r frames mean max capl capm att failed <<<"$(diag)"
+    alive '100 stress cycles'
+    printf 'Stress: RSS %s kB at start, %s kB after 10 cycles, %s kB after 100 (growth after warm-up: %s kB)\n' "$rss0" "$rss1" "$rss2" "$((rss2 - rss1))"
+    printf 'Stress: %s frames drawn, frame mean %s us, max %s us; capture last %s us, max %s us; capture failures %s\n' \
+        "$frames" "$((mean / 1000))" "$((max / 1000))" "$((capl / 1000))" "$((capm / 1000))" "$failed"
+    (( failed == 0 )) || fail 'some workspace captures failed'
+    (( rss2 - rss1 < 40000 )) || fail "memory kept growing after warm-up: $((rss2 - rss1)) kB over 90 cycles"
+}
+
 cleanup_nested() {
     local result=$?
     local i
@@ -388,15 +450,31 @@ LUA
     while (( SECONDS < deadline )); do
         kill -0 "$child_pid" 2>/dev/null || fail 'nested Hyprland exited during startup'
         if signature=$(find_instance 2>/dev/null); then
+            if [[ ${PRISM_NESTED_BACKEND-wayland} == headless && -z ${headless_created-} ]]; then
+                # No host window: the headless backend has no output until one is created,
+                # and it renders on its own clock, so a host workspace switch cannot stall it.
+                # The Wayland backend must exist for Hyprland to start, but its output is a host
+                # window that only renders while the host shows it. Switch it off and render on
+                # the headless output, which runs on its own clock.
+                if nested_ctl output create headless >/dev/null 2>&1; then
+                    headless_created=1
+                    nested_ctl repl 'hl.monitor({ output = "WAYLAND-1", disabled = true }) hl.monitor({ output = "HEADLESS-1", mode = "1280x800@60", position = "0x0", scale = 1 }) return 1' >/dev/null 2>&1 || true
+                fi
+            fi
             monitor=$(nested_ctl -j monitors | /usr/bin/jq -er '
                 select(type == "array" and length == 1) | .[0]
-                | select(.hardwareDetails.backend == "wayland" and .width > 0 and .height > 0)
+                | select((.hardwareDetails.backend == "wayland" or .hardwareDetails.backend == "headless") and .width > 0 and .height > 0)
                 | "\(.name) \(.width)x\(.height)"
             ') && break
         fi
         /usr/bin/sleep 0.1
     done
-    [[ -n $monitor ]] || fail 'no usable Wayland output before timeout'
+    if [[ -z $monitor ]]; then
+        printf 'monitors: %s\n' "$(nested_ctl -j monitors 2>&1 | /usr/bin/jq -c '[.[]|{name,backend:.hardwareDetails.backend,width,height}]' 2>&1 | /usr/bin/head -c 600)" >&2
+        printf 'create: %s\n' "$(nested_ctl output create headless 2>&1 | /usr/bin/head -c 300)" >&2
+        /usr/bin/tail -n 30 "$XDG_RUNTIME_DIR"/hypr/*/hyprland.log >&2 2>/dev/null || true
+        fail 'no usable output before timeout'
+    fi
 
     config_errors=$(nested_ctl -j configerrors) || fail 'could not read nested config errors'
     /usr/bin/jq -e 'type == "array" and all(.[]; . == "")' <<<"$config_errors" >/dev/null \
@@ -427,6 +505,7 @@ LUA
             --screenshot) capture_nested "${monitor%% *}" ;;
             --driver) test_driver ;;
             --safety) test_safety ;;
+            --stress) test_stress ;;
         esac
 
         reply=$(nested_ctl plugin unload "$plugin") || fail "cycle $cycle unload: $reply"
@@ -434,7 +513,7 @@ LUA
         plugins=$(nested_ctl -j plugin list) || fail "cycle $cycle: could not read unloaded plugins"
         /usr/bin/jq -e '. == []' <<<"$plugins" >/dev/null \
             || fail "cycle $cycle: expected an empty plugin list: $plugins"
-        if [[ $mode == --gesture || $mode == --screenshot || $mode == --driver || $mode == --safety ]]; then
+        if [[ $mode == --gesture || $mode == --screenshot || $mode == --driver || $mode == --safety || $mode == --stress ]]; then
             expect_lua 'Prism Lua namespace after unload' 'return type(hl.plugin.prism)' nil
         fi
         printf 'Cycle %s/%s on PID %s: [] -> [Prism] -> []\n' "$cycle" "$cycles" "$child_pid"
@@ -458,7 +537,7 @@ case $mode in
     --check)
         [[ $# == 1 ]] || fail 'usage: nested.sh --check'
         ;;
-    --lifecycle|--gesture|--screenshot|--driver|--safety)
+    --lifecycle|--gesture|--screenshot|--driver|--safety|--stress)
         shift
         cycles=1
         if [[ $mode == --lifecycle ]]; then
@@ -541,8 +620,8 @@ sandbox=(/usr/bin/bwrap \
     --ro-bind "$script_path" /prism-test/nested.sh "${plugin_mount[@]}" \
     --chdir /run/prism/home --setenv PATH /usr/bin --setenv HOME /run/prism/home \
     --setenv XDG_RUNTIME_DIR /run/prism --setenv WAYLAND_DISPLAY /run/prism-parent \
-    --setenv HYPRLAND_NO_RT 1 --setenv HYPRLAND_NO_SD_VARS 1 --setenv HYPRLAND_NO_SD_NOTIFY 1 \
-    --setenv GSETTINGS_BACKEND memory --setenv PRISM_TEST_WINDOWS "$test_windows" -- \
+    --setenv AQ_BACKENDS "${PRISM_NESTED_BACKEND:-headless}" --setenv PRISM_NESTED_BACKEND "${PRISM_NESTED_BACKEND:-headless}" --setenv HYPRLAND_NO_RT 1 --setenv HYPRLAND_NO_SD_VARS 1 --setenv HYPRLAND_NO_SD_NOTIFY 1 \
+    --setenv GSETTINGS_BACKEND memory --setenv PRISM_TEST_WINDOWS "$test_windows" --setenv PRISM_STRESS_VERBOSE "${PRISM_STRESS_VERBOSE:-0}" --setenv PRISM_STRESS_CYCLES "${PRISM_STRESS_CYCLES:-100}" -- \
     /usr/bin/bash /prism-test/nested.sh --inside "$mode" "$cycles")
 
 if [[ $mode != --screenshot ]]; then
@@ -570,6 +649,7 @@ for r, g, b in im.getdata():
     if abs(r - 0xc0) < 24 and abs(g - 0x18) < 24 and abs(b - 0x18) < 24: red += 1
     if abs(r - 0x20) < 24 and abs(g - 0x40) < 24 and abs(b - 0xd0) < 24: blue += 1
 print(f'Face content pixels: green={green} red={red} blue={blue}')
-sys.exit(0 if green > 20000 and red > 2000 else 1)
+need = im.width * im.height // 200  # 0.5 % of the screen each
+sys.exit(0 if green > need and red > need else 1)
 PY
 fi

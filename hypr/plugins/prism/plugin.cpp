@@ -8,6 +8,7 @@
 #include <hyprland/src/managers/SessionLockManager.hpp>
 #include <lua.hpp>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -59,6 +60,23 @@ std::chrono::steady_clock::time_point lastFrame;
 std::uint64_t missingContext = 0;
 std::uint64_t lockedContext = 0;
 std::uint64_t closedState = 0;
+// Timing, for the nested stress test and for you: how long Prism spends per frame while
+// it is drawing, and how long a refresh of the pictures takes at gesture start.
+std::uint64_t frameCount = 0, frameNsTotal = 0, frameNsMax = 0;
+std::uint64_t captureNsLast = 0, captureNsMax = 0;
+
+struct Stopwatch {
+    std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+    [[nodiscard]] std::uint64_t ns() const {
+        return static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count());
+    }
+};
+
+void noteCapture(std::uint64_t ns) noexcept {
+    captureNsLast = ns;
+    captureNsMax = std::max(captureNsMax, ns);
+}
 
 // Everything below runs inside the compositor: nothing may throw out of it.
 void invalidate() noexcept {
@@ -123,6 +141,7 @@ void onRenderStage(const Event::SRenderStageEvent& event) {
     }
 
     try {
+        const Stopwatch frameTimer;
         const auto now = std::chrono::steady_clock::now();
         if (lastFrame != std::chrono::steady_clock::time_point{} && before.animating) {
             const auto seconds = std::chrono::duration<double>(now - lastFrame).count();
@@ -133,6 +152,10 @@ void onRenderStage(const Event::SRenderStageEvent& event) {
         renderer.enqueue(event.context->get(), state, core.workspaces(), content.textures());
         if (state.animating && event.monitor && g_pHyprRenderer)
             g_pHyprRenderer->damageMonitor(event.monitor);
+        const auto ns = frameTimer.ns();
+        ++frameCount;
+        frameNsTotal += ns;
+        frameNsMax = std::max(frameNsMax, ns);
     } catch (...) {
         core.reset();
     }
@@ -214,7 +237,9 @@ int begin(lua_State* state) noexcept {
         // workspace the swipe starts on is always re-captured, so the front face is
         // never an old picture of it.
         try {
+            const Stopwatch timer;
             content.refresh(core.workspaces(), lua_tointeger(state, 2));
+            noteCapture(timer.ns());
         } catch (...) {
             content.clear();
         }
@@ -230,7 +255,9 @@ int open(lua_State* state) noexcept {
     const auto accepted = core.open(current);
     if (accepted) {
         try {
+            const Stopwatch timer;
             content.refresh(core.workspaces(), current);
+            noteCapture(timer.ns());
         } catch (...) {
             content.clear();
         }
@@ -328,7 +355,7 @@ int snapshot(lua_State* state) noexcept {
 
 int renderDiagnostics(lua_State* state) noexcept {
     const auto counters = prism::renderDiagnostics();
-    lua_createtable(state, 0, 12);
+    lua_createtable(state, 0, 18);
     lua_pushinteger(state, static_cast<lua_Integer>(counters.stage));
     lua_setfield(state, -2, "stage");
     lua_pushinteger(state, static_cast<lua_Integer>(missingContext));
@@ -354,6 +381,16 @@ int renderDiagnostics(lua_State* state) noexcept {
     lua_setfield(state, -2, "captureFailed");
     lua_pushinteger(state, static_cast<lua_Integer>(stats.reused));
     lua_setfield(state, -2, "reused");
+    lua_pushinteger(state, static_cast<lua_Integer>(frameCount));
+    lua_setfield(state, -2, "frames");
+    lua_pushinteger(state, static_cast<lua_Integer>(frameCount ? frameNsTotal / frameCount : 0));
+    lua_setfield(state, -2, "frameNsMean");
+    lua_pushinteger(state, static_cast<lua_Integer>(frameNsMax));
+    lua_setfield(state, -2, "frameNsMax");
+    lua_pushinteger(state, static_cast<lua_Integer>(captureNsLast));
+    lua_setfield(state, -2, "captureNsLast");
+    lua_pushinteger(state, static_cast<lua_Integer>(captureNsMax));
+    lua_setfield(state, -2, "captureNsMax");
     return 1;
 }
 
