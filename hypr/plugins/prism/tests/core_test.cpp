@@ -147,6 +147,17 @@ void testInterruptionAndCancel() {
     check(core.snapshot().frontWorkspace == 2 && !core.takeSelection(), "dispatcher cancellation did not return to original workspace without switching");
 }
 
+void testCloseChoosesWhereTheTurnIsGoing() {
+    auto core = openOverview();
+    check(core.snapshot().frontWorkspace == 2, "fixture does not start on workspace 2");
+    core.rotate(1);
+    // No tick: the cube has not moved yet, but the user already pressed Enter.
+    check(core.snapshot().frontWorkspace == 2, "the turn moved before any frame");
+    core.close(true);
+    settle(core);
+    check(core.takeSelection() == 11, "Right then Enter chose the old face instead of the one turned to");
+}
+
 void testWorkspaceChangesAndFlatTiming() {
     auto core = openOverview();
     core.rotate(1);
@@ -188,6 +199,7 @@ int main() {
     testVerticalTrackingAndCommit();
     testRotationAndSelection();
     testInterruptionAndCancel();
+    testCloseChoosesWhereTheTurnIsGoing();
     testWorkspaceChangesAndFlatTiming();
     std::cout << "Prism core tests passed\n";
 }

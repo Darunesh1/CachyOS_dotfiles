@@ -238,7 +238,9 @@ bool Core::close(bool selectFront) {
     if (phase() == Phase::Closed)
         return false;
 
-    const auto front = workspaceAt(workspaces_, facePosition_);
+    // A turn still settling (Right, then Enter at once) counts: choose where the cube is
+    // GOING, not where it is this frame. A finger still holding it uses the live position.
+    const auto front = workspaceAt(workspaces_, gesture_ ? facePosition_ : targetFacePosition_);
     const auto workspace = selectFront ? front : originWorkspace_;
     const auto position = positionOf(workspaces_, workspace).value_or(faceCenter(facePosition_));
     targetFacePosition_ = nearestPosition(position, facePosition_, workspaces_.size());

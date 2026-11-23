@@ -188,6 +188,43 @@ int begin(lua_State* state) noexcept {
     return pushResult(state, accepted);
 }
 
+int open(lua_State* state) noexcept {
+    if (!lua_isinteger(state, 1))
+        return pushResult(state, false);
+    const auto current = lua_tointeger(state, 1);
+    const auto accepted = core.open(current);
+    if (accepted) {
+        try {
+            content.refresh(core.workspaces(), current);
+        } catch (...) {
+            content.clear();
+        }
+        requestFrame();
+    }
+    return pushResult(state, accepted);
+}
+
+int close(lua_State* state) noexcept {
+    if (!lua_isboolean(state, 1))
+        return pushResult(state, false);
+    const auto accepted = core.close(lua_toboolean(state, 1) != 0);
+    if (accepted)
+        requestFrame();
+    return pushResult(state, accepted);
+}
+
+int rotate(lua_State* state) noexcept {
+    if (!lua_isinteger(state, 1))
+        return pushResult(state, false);
+    const auto delta = lua_tointeger(state, 1);
+    if (delta < -8 || delta > 8)
+        return pushResult(state, false);
+    const auto accepted = core.rotate(static_cast<int>(delta));
+    if (accepted)
+        requestFrame();
+    return pushResult(state, accepted);
+}
+
 int update(lua_State* state) noexcept {
     double dx, dy, elapsed;
     if (!readFiniteNumber(state, 1, dx) || !readFiniteNumber(state, 2, dy) ||
@@ -306,6 +343,9 @@ constexpr std::array luaBindings{
     LuaBinding{"prismStatus", prismStatus},
     LuaBinding{"setWorkspaces", setWorkspaces},
     LuaBinding{"begin", begin},
+    LuaBinding{"open", open},
+    LuaBinding{"close", close},
+    LuaBinding{"rotate", rotate},
     LuaBinding{"update", update},
     LuaBinding{"finish", finish},
     LuaBinding{"tick", tick},

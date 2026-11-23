@@ -162,7 +162,12 @@ hl.bind(mainMod .. " + Tab", hl.dsp.exec_cmd(L.scripts .. "/rofi/window-switcher
 -- Workspace overview: every workspace as a card with its windows (the same thing
 -- the 3-finger swipe up opens, see config/input.lua). This is the way in without
 -- a touchpad. SUPER + Tab stays the flat list above; this is the picture view.
-hl.bind(mainMod .. " + O", hl.dsp.exec_cmd(L.scripts .. "/overview/toggle.sh"))
+hl.bind(mainMod .. " + O", function()
+    -- The opt-in native plugin handles it when loaded; otherwise Quickshell.
+    if not require("config/prism_native").toggle() then
+        hl.dispatch(hl.dsp.exec_cmd(L.scripts .. "/overview/toggle.sh"))
+    end
+end)
 
 
 -- ── Laptop Lid Switch ───────────────────────────────────────────────────────

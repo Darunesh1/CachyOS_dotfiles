@@ -80,8 +80,15 @@ local function resident_alive()
     return name == "qs"
 end
 
+-- Opt-in native plugin (see prism_native.lua). When it is loaded it takes the swipe;
+-- otherwise everything below is exactly the Quickshell path. It loads a moment after
+-- the config finishes, never during it, so a bad plugin cannot break the config.
+local native = require("config/prism_native")
+hl.timer(function() native.load() end, { type = "oneshot", timeout = 800 })
+
 local function prism_gesture(dir)
     local feed, acc, v, last_p, last_t
+    local nat = native.gesture(dir)
 
     local function progress(e)
         if not feed or not e.delta then return end
@@ -99,6 +106,7 @@ local function prism_gesture(dir)
 
     return {
         start = function(e)
+            if nat.start(e) then return end
             acc, v, last_p, last_t = 0, 0, dir == "up" and 0 or 1, nil
             if resident_alive() then
                 feed = io.open(prism .. "/gesture", "a")
@@ -113,8 +121,12 @@ local function prism_gesture(dir)
             -- Nothing to drive. If there is room, start one for next time.
             hl.dispatch(hl.dsp.exec_cmd(overview .. " resident"))
         end,
-        update = progress,
+        update = function(e)
+            if nat.is_active() then return nat.update(e) end
+            progress(e)
+        end,
         finish = function(e)
+            if nat.is_active() then return nat.finish(e) end
             if feed then
                 feed:write("F ", e.cancelled and "1" or "0", " ", string.format("%.6f", v), "\n")
                 feed:close()

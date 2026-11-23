@@ -7,11 +7,14 @@ Usage: nested.sh --check
        nested.sh --lifecycle [--cycles COUNT] [PLUGIN]
        nested.sh --gesture [PLUGIN]
        nested.sh --screenshot OUTPUT [--windows] [PLUGIN]
+       nested.sh --driver [PLUGIN]
 
 --check       Start an isolated Hyprland and verify its Wayland output.
 --lifecycle   Verify Prism load and unload on the same isolated instance.
 --gesture     Drive Prism's Lua callbacks and verify state before unloading.
 --screenshot  Open Prism and save a PNG of the nested output before unloading.
+--driver      Open three windows, then drive Prism through hypr/config/prism_native.lua
+              (swipe callbacks, keys submap, watcher, selection, watchdog reset).
 --windows     With --screenshot: first open a red, green and blue window on workspaces
               1, 2 and 3, so each face has distinct content.
 COUNT         1 to 100, default 10.
@@ -219,6 +222,69 @@ LUA
     printf 'Prism render diagnostics: %s\n' "$counters"
 }
 
+wait_phase() {
+    local want=$1 phase i
+    for (( i = 0; i < 100; ++i )); do
+        phase=$(nested_ctl repl 'return hl.plugin.prism.snapshot().phase') || fail 'could not read the Prism phase'
+        [[ $phase == "$want" ]] && return 0
+        /usr/bin/sleep 0.1
+    done
+    fail "Prism did not reach phase $want (last: $phase)"
+}
+
+# The Lua driver the real config uses, run against the real plugin in the nested
+# compositor. Key presses cannot be injected, so the submap bindings are checked by
+# their effect on `hyprctl submap` and the plugin calls they make are called directly.
+test_driver() {
+    local out
+    open_test_windows
+    expect_lua 'Driver load' "_G.drv = dofile('/prism-test/prism_native.lua'); return tostring(_G.drv.enabled())" true
+    expect_lua 'Driver swipe up' "local g = _G.drv.gesture('up'); _G.g = g
+assert(g.start({ delta = { x = 0, y = -6 }, time_ms = 1000 }), 'start refused')
+assert(g.is_active())
+g.update({ delta = { x = 0, y = -150 }, time_ms = 1100 })
+local s = hl.plugin.prism.snapshot()
+assert(s.phase == 'opening' and s.openness > 0.4, 'did not follow the fingers: ' .. s.openness)
+assert(s.originWorkspace == 3, 'origin should be the active workspace 3, got ' .. tostring(s.originWorkspace))
+g.finish({ cancelled = false })
+assert(not g.is_active())
+return s.phase" opening
+    wait_phase open
+    # The watcher must put the keyboard in the prism submap while it is open.
+    local i submap=
+    for (( i = 0; i < 30; ++i )); do
+        submap=$(nested_ctl submap 2>/dev/null || true)
+        [[ $submap == prism ]] && break
+        /usr/bin/sleep 0.1
+    done
+    [[ $submap == prism ]] || fail "the keys submap was not entered while open (got: $submap)"
+    printf 'Driver submap while open: %s\n' "$submap"
+    expect_lua 'Driver rotate' "assert(hl.plugin.prism.rotate(1)); return 'ok'" ok
+    # Rotation is a spring; wait for it to settle, then the front face is the one turned to.
+    for (( i = 0; i < 50; ++i )); do
+        [[ $(nested_ctl repl 'return tostring(hl.plugin.prism.snapshot().animating)') == false ]] && break
+        /usr/bin/sleep 0.1
+    done
+    expect_lua 'Driver rotated front face' "return tostring(hl.plugin.prism.snapshot().frontWorkspace ~= 3)" true
+    # Choose the front face and let the watcher focus it.
+    local front
+    front=$(nested_ctl repl "local p = hl.plugin.prism; local f = p.snapshot().frontWorkspace; assert(p.close(true)); return tostring(f)") \
+        || fail 'could not close Prism'
+    printf 'Driver closing on front workspace: %s\n' "$front"
+    wait_phase closed
+    for (( i = 0; i < 30; ++i )); do
+        submap=$(nested_ctl submap 2>/dev/null || true)
+        [[ -z $submap || $submap == default || $submap == reset ]] && break
+        /usr/bin/sleep 0.1
+    done
+    [[ -z $submap || $submap == default || $submap == reset ]] || fail "the submap was not released after closing (got: $submap)"
+    out=$(nested_ctl repl 'return tostring(hl.get_active_workspace().id)') || fail 'could not read the active workspace'
+    [[ $out == "$front" ]] || fail "the watcher focused workspace $out, expected the front face $front"
+    printf 'Driver active workspace after close: %s (submap released)\n' "$out"
+    # Watchdog and kill switch.
+    expect_lua 'Driver reset' "_G.drv.reset(); return hl.plugin.prism.snapshot().phase" closed
+}
+
 cleanup_nested() {
     local result=$?
     local i
@@ -315,6 +381,7 @@ LUA
         case $mode in
             --gesture) test_gestures ;;
             --screenshot) capture_nested "${monitor%% *}" ;;
+            --driver) test_driver ;;
         esac
 
         reply=$(nested_ctl plugin unload "$plugin") || fail "cycle $cycle unload: $reply"
@@ -322,7 +389,7 @@ LUA
         plugins=$(nested_ctl -j plugin list) || fail "cycle $cycle: could not read unloaded plugins"
         /usr/bin/jq -e '. == []' <<<"$plugins" >/dev/null \
             || fail "cycle $cycle: expected an empty plugin list: $plugins"
-        if [[ $mode == --gesture || $mode == --screenshot ]]; then
+        if [[ $mode == --gesture || $mode == --screenshot || $mode == --driver ]]; then
             expect_lua 'Prism Lua namespace after unload' 'return type(hl.plugin.prism)' nil
         fi
         printf 'Cycle %s/%s on PID %s: [] -> [Prism] -> []\n' "$cycle" "$cycles" "$child_pid"
@@ -346,7 +413,7 @@ case $mode in
     --check)
         [[ $# == 1 ]] || fail 'usage: nested.sh --check'
         ;;
-    --lifecycle|--gesture|--screenshot)
+    --lifecycle|--gesture|--screenshot|--driver)
         shift
         cycles=1
         if [[ $mode == --lifecycle ]]; then
@@ -379,7 +446,8 @@ case $mode in
         script_path=$(/usr/bin/realpath -e -- "$0")
         plugin=${1:-${script_path%/*}/../build/prism.so}
         [[ -f $plugin && -r $plugin ]] || fail "build the plugin or specify a readable shared object: $plugin"
-        plugin_mount=(--ro-bind "$plugin" /prism-test/prism.so)
+        plugin_mount=(--ro-bind "$plugin" /prism-test/prism.so
+            --ro-bind "${script_path%/*}/../../../config/prism_native.lua" /prism-test/prism_native.lua)
         ;;
     --help|-h|'')
         usage
