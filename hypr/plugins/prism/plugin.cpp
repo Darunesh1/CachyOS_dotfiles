@@ -6,6 +6,7 @@
 
 #include <hyprland/src/plugins/PluginAPI.hpp>
 #include <hyprland/src/state/MonitorState.hpp>
+#include <hyprland/src/workspace/HLWorkspace.hpp>
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/managers/SessionLockManager.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
@@ -136,6 +137,18 @@ void applyQuality(prism::Quality quality) noexcept {
     try {
         renderer.setQuality(quality);
         content.configure(prism::captureScale(quality), quality == prism::Quality::Full);
+    } catch (...) {
+    }
+}
+
+// Labels under the faces: text sized to the screen, the current workspace in the accent colour.
+void prepareLabels(prism::WorkspaceId origin) noexcept {
+    try {
+        int pixels = 20;
+        if (const auto workspace = prism::findWorkspace(origin))
+            if (const auto monitor = workspace->m_monitor.lock())
+                pixels = static_cast<int>(std::lround(monitor->m_transformedSize.y * 0.022));
+        renderer.prepareLabels(content.textures(), origin, pixels);
     } catch (...) {
     }
 }
@@ -392,6 +405,7 @@ int begin(lua_State* state) noexcept {
             const Stopwatch timer;
             renderer.prepareBackdrop();
             content.refresh(core.workspaces(), lua_tointeger(state, 2));
+            prepareLabels(lua_tointeger(state, 2));
             noteCapture(timer.ns());
         } catch (...) {
             content.clear();
@@ -411,6 +425,7 @@ int open(lua_State* state) noexcept {
             const Stopwatch timer;
             renderer.prepareBackdrop();
             content.refresh(core.workspaces(), current);
+            prepareLabels(current);
             noteCapture(timer.ns());
         } catch (...) {
             content.clear();

@@ -83,7 +83,10 @@ std::optional<FaceTexture> captureWorkspace(PHLWORKSPACE workspace, double scale
                window->m_monitor == monitor && window->m_workspace == workspace;
     };
     const auto& windows = Desktop::windowState()->windows();
+    int windowCount = 0;
     for (const auto& window : windows) {
+        if (belongs(window))
+            ++windowCount;
         if (belongs(window) && window->m_ruleApplicator && window->m_ruleApplicator->noScreenShare().valueOrDefault())
             return std::nullopt;
     }
@@ -141,7 +144,8 @@ std::optional<FaceTexture> captureWorkspace(PHLWORKSPACE workspace, double scale
     auto texture = framebuffer->getTexture();
     if (!texture || !texture->ok())
         return std::nullopt;
-    return FaceTexture{static_cast<WorkspaceId>(*workspace->numberedID()), std::move(texture)};
+    return FaceTexture{static_cast<WorkspaceId>(*workspace->numberedID()), std::move(texture), std::string{},
+                       windowCount};
 }
 
 void ContentCache::configure(double scale, bool transparentBackground) noexcept {

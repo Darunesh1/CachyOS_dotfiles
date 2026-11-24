@@ -1730,7 +1730,31 @@ BINARIES
         elif [[ "$pn_built" != "$pn_running" ]]; then
             row WARN "prism native plugin" "built for a different Hyprland (Hyprland updated?); rebuild: make -C $REPO/hypr/plugins/prism. Quickshell is used until then"
         else
-            row OK "prism native plugin" "opted in, built for this Hyprland (ABI matches)"
+            # Opted in and built is not the same as loaded: on 2026-11-24 the plugin silently did
+            # not load at login (hl.plugin.load does nothing once the config has been read).
+            local pn_loaded
+            pn_loaded=$(hyprctl plugin list 2>/dev/null | grep -c 'Plugin Prism')
+            if ! command -v hyprctl >/dev/null || [[ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
+                row OK "prism native plugin" "opted in, built for this Hyprland (ABI matches); not in a Hyprland session, so loading was not checked"
+            elif [[ "$pn_loaded" -ge 1 ]]; then
+                row OK "prism native plugin" "opted in, built for this Hyprland (ABI matches), loaded"
+            else
+                row WARN "prism native plugin" "opted in and built, but NOT loaded: $(cat "${XDG_RUNTIME_DIR:-/tmp}/prism/load-result" 2>/dev/null || echo 'no answer recorded'). Load once with: hyprctl plugin load $pn_so"
+            fi
+        fi
+    fi
+
+    # Prism's native look follows the power mode through two flag files (see
+    # hypr/config/prism_native.lua). The Power Saving flag lives in $XDG_RUNTIME_DIR, so it is gone
+    # after a reboot while power-profiles-daemon may still be in power-saver: then the overview
+    # would use its full look although the machine is saving power.
+    if [[ -f "$pn_flag" ]] && command -v powerprofilesctl >/dev/null; then
+        local pn_profile
+        pn_profile=$(powerprofilesctl get 2>/dev/null)
+        if [[ "$pn_profile" == power-saver && ! -f "${XDG_RUNTIME_DIR:-/tmp}/prism/power-saver" ]]; then
+            row WARN "prism power tier" "profile is power-saver but the flag file is missing, so Prism uses its full look. Re-apply with SUPER+SHIFT+G (Power Saving)"
+        else
+            row OK "prism power tier" "profile $pn_profile; look follows it (lite in Power Saving and Game Mode, full otherwise)"
         fi
     fi
 

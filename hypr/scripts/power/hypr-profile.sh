@@ -15,6 +15,12 @@ fi
 
 MODE=$1
 
+# Prism's native overview picks its "lite" look (plain backdrop, small pictures) in Power
+# Saving. It reads this file when it opens, instead of asking powerprofilesctl from inside the
+# compositor. Game Mode has its own flag (game-mode.sh). See hypr/config/prism_native.lua.
+PRISM_DIR="${XDG_RUNTIME_DIR:-/tmp}/prism"
+PRISM_POWER_SAVER="$PRISM_DIR/power-saver"
+
 # The echoes below go nowhere: this runs from rofi (profile-menu.sh) and from
 # the waybar module, neither of which has a terminal attached -- so switching
 # profiles gave no sign at all that anything had happened. Each case fills these
@@ -26,6 +32,7 @@ case $MODE in
     power)
         echo "Activating Ultra Power Saving Mode..."
         powerprofilesctl set power-saver || PROFILE_RC=$?
+        mkdir -p "$PRISM_DIR" && touch "$PRISM_POWER_SAVER"
         ICON=power-profile-power-saver-symbolic
         TITLE="Power Saving"
         BODY="Animations, shadows and blur off; frame rate throttled when idle."
@@ -44,6 +51,7 @@ case $MODE in
     balanced)
         echo "Activating Balanced Mode..."
         powerprofilesctl set balanced || PROFILE_RC=$?
+        rm -f "$PRISM_POWER_SAVER"
         ICON=power-profile-balanced-symbolic
         TITLE="Balanced"
         BODY="Animations, shadows and blur back on."
@@ -62,6 +70,7 @@ case $MODE in
     performance)
         echo "Activating Ultra Performance Mode..."
         powerprofilesctl set performance || PROFILE_RC=$?
+        rm -f "$PRISM_POWER_SAVER"
         ICON=power-profile-performance-symbolic
         TITLE="Ultra Performance"
         BODY="Eye-candy off, frame rate uncapped."

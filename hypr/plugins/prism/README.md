@@ -11,6 +11,9 @@ make -C hypr/plugins/prism
 c++ -std=c++23 -O2 -Wall -Wextra -Wconversion -Wsign-conversion -Werror hypr/plugins/prism/core.cpp hypr/plugins/prism/tests/core_test.cpp -o /tmp/prism-core-test && /tmp/prism-core-test
 c++ -std=c++26 hypr/plugins/prism/tests/render_test.cpp -o /tmp/prism-render-test && /tmp/prism-render-test
 c++ -std=c++23 -O2 -Wall -Wextra -Wconversion -Wsign-conversion -Werror hypr/plugins/prism/core.cpp hypr/plugins/prism/tests/swipe_test.cpp -o /tmp/prism-swipe-test && /tmp/prism-swipe-test
+c++ -std=c++26 -O2 -Wall -Wextra hypr/plugins/prism/tests/hit_test.cpp -o /tmp/prism-hit-test && /tmp/prism-hit-test
+c++ -std=c++26 -O2 -Wall -Wextra hypr/plugins/prism/core.cpp hypr/plugins/prism/tests/pointer_test.cpp -o /tmp/prism-pointer-test && /tmp/prism-pointer-test
+hypr/plugins/prism/tests/nested.sh --autoload   # the way the config loads it at login
 hypr/plugins/prism/tests/nested.sh --check
 hypr/plugins/prism/tests/nested.sh --lifecycle --cycles 20
 hypr/plugins/prism/tests/nested.sh --gesture
@@ -38,7 +41,23 @@ rm    ~/.config/hypr/prism-native     # back to the Quickshell Prism
 
 **Face size** adapts to the number of workspaces (`openFaceFraction` in `render.hpp`): the open front face fills about 72 % of the screen with 2 workspaces, 68 % with 3, 65 % with 4, 61 % with 5 and 58 % with 6 or more, always in the screen's own shape. Downside: the size changes when a workspace opens or closes. The numbers are a first guess to be tuned by eye. With 3 or 4 workspaces the neighbours are edge-on or facing away (the sides of a cube), as they were at the old fixed 50 %, so only the front face shows until it turns; from 5 workspaces the two neighbours show beside it.
 
-**After rebuilding**, reload the config (SUPER + SHIFT + R): the plugin is loaded again from the new file. Do not rebuild while the plugin is loaded if you can avoid it. `./install.sh --check` has a "prism native plugin" row: it says "off", or warns when you are opted in but the build is missing or was made for another Hyprland (rebuild after every Hyprland update; a mismatched plugin refuses to load and Quickshell takes over).
+**Loading.** The config loads the plugin at login with `hyprctl plugin load` (started from Lua, retried, and a notification says why if it fails; the answer is also in `$XDG_RUNTIME_DIR/prism/load-result`). It is NOT `hl.plugin.load`: measured in `nested.sh --autoload`, that call returns nil and loads nothing once the config has been read, which is why the first live trial did not load at login. **After rebuilding**, the running compositor still has the OLD file mapped (the linker replaces the file, it does not overwrite it, so nothing crashes). Load the new one: `hyprctl plugin unload ~/.config/hypr/plugins/prism/build/prism.so`, then `hyprctl plugin load ~/.config/hypr/plugins/prism/build/prism.so` (cube closed; unload while open is tested but pointless).
+
+## How it looks and what you can do (2026-11-24)
+
+| | |
+|---|---|
+| Backdrop | your wallpaper (`~/Pictures/Wallpaper/current_wallpaper`, any size, shrunk to 1920 wide, cover-fit) under a dark gradient; the same wallpaper behind each face, so an empty workspace looks like a desktop. Reloaded when the file changes |
+| Faces | a soft three-ring shadow, a 2 px outline (accent `#8ab4f8` on the workspace you are on), a label pill under each: `2 · 3 windows` / `empty`, accent when current |
+| Sharpness | pictures captured at 0.75 of the screen (long side at most 1600 px); lite uses 0.4 |
+| Click | a side face turns to the front; the front face goes to that workspace; the backdrop closes without changing workspace; press and release are swallowed as a pair so the app underneath never sees half a click |
+| Scroll | wheel or two-finger scroll turns one face per step (touchpad needs about 40 units, at most one face per 120 ms) |
+| Swipe | 3 fingers up opens, sideways turns, down closes (see above) |
+| Keys | arrows, Enter, Esc |
+
+**Power tiers** (`hl.plugin.prism.setQuality`, chosen in `prism_native.lua` when the cube opens): **full** (wallpaper, shadows, 0.75 pictures) in Balanced and Performance; **lite** (plain gradient, no shadows, 0.4 pictures, the wallpaper texture freed) in Power Saving and in Game Mode. The signal is two files: `$XDG_RUNTIME_DIR/game-mode/active` (Game Mode, existing) and `$XDG_RUNTIME_DIR/prism/power-saver` (written by `hypr/scripts/power/hypr-profile.sh`). Downside: a profile changed by anything else is not seen, and the flag is gone after a reboot while power-profiles-daemon may still be in power-saver (the audit row "prism power tier" warns about that).
+
+**Not done / not verified:** rounded corners (the compositor's mesh path cannot round a perspective quad; the outline and shadow carry the look instead); workspace names (Hyprland keeps them private, so the number is shown); dragging a window to another workspace (stage 2); real clicks, scrolls and touchpad feel. The nested test cannot make the compositor deliver pointer events, so `hl.plugin.prism.pointerClick/pointerScroll` drive the same routers from Lua (that proves the logic, not Hyprland's event path); `renderDiagnostics().clicksOwned` and `swipesOwned` count what the live listeners took. `./install.sh --check` has a "prism native plugin" row: it says "off", or warns when you are opted in but the build is missing or was made for another Hyprland (rebuild after every Hyprland update; a mismatched plugin refuses to load and Quickshell takes over).
 
 ## What was measured (nested, headless, 2026-11-23)
 

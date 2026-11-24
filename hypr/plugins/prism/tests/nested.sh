@@ -327,6 +327,17 @@ return s.phase" opening
     expect_lua 'Pointer click front' "assert(hl.plugin.prism.pointerClick(0.5, 0.5)); return 'ok'" ok
     wait_phase closed
     expect_lua 'Pointer front click chose workspace 1' "local c = hl.plugin.prism.renderDiagnostics().clicksOwned; return tostring(hl.plugin.prism.takeSelection())" 1
+
+    # Power tiers: full has the wallpaper, lite frees it; going back to full loads it again.
+    expect_lua 'Full tier has the backdrop' "local p = hl.plugin.prism; assert(p.setQuality('full')); assert(p.setWorkspaces({1, 2, 3})); assert(p.open(1)); local d = p.renderDiagnostics(); return d.quality .. ' ' .. tostring(d.backdrop)" "full true"
+    wait_phase open
+    expect_lua 'Lite tier drops the backdrop' "local p = hl.plugin.prism; assert(p.close(false)); assert(p.setQuality('lite')); return 'ok'" ok
+    wait_phase closed
+    expect_lua 'Lite tier opens without the wallpaper' "local p = hl.plugin.prism; assert(p.open(1)); local d = p.renderDiagnostics(); return d.quality .. ' ' .. tostring(d.backdrop)" "lite false"
+    wait_phase open
+    expect_lua 'Lite tier still draws' "local d = hl.plugin.prism.renderDiagnostics(); return tostring(d.drawn > 0)" true
+    expect_lua 'Back to full' "local p = hl.plugin.prism; assert(p.close(false)); assert(p.setQuality('full')); return 'ok'" ok
+    wait_phase closed
 }
 
 # The auto-load path of the real config: opted in by a flag file, loaded from Lua. This is

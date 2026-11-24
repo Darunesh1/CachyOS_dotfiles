@@ -8,7 +8,10 @@
 #include <cstdint>
 #include <cmath>
 #include <numbers>
+#include <optional>
 #include <span>
+#include <string>
+#include <unordered_map>
 
 namespace Render {
 class CRenderContext;
@@ -111,6 +114,8 @@ inline std::vector<ProjectedFace> projectFaces(std::span<const WorkspaceId> work
 struct FaceTexture {
     WorkspaceId workspace;
     Hyprutils::Memory::CSharedPointer<Render::ITexture> texture;
+    std::string name;  // reserved for a workspace name (Hyprland keeps it private); the number is shown
+    int windows = 0;   // how many windows it holds, for its label
 };
 
 class FaceRenderer {
@@ -129,12 +134,28 @@ public:
     // milliseconds, so call it from a Lua callback (gesture start), never from the render
     // pass. Cheap when nothing changed (one stat of the file).
     void prepareBackdrop();
+    // Builds or refreshes the text label under each face ("2 · 3 windows"). Outside the render
+    // pass for the same reason as prepareBackdrop. `origin` is the workspace you are on, shown
+    // in the accent colour; `pixels` is the text height (about 1.9 % of the screen height).
+    void prepareLabels(std::span<const FaceTexture> faces, std::optional<WorkspaceId> origin, int pixels);
 
 private:
     Hyprutils::Memory::CSharedPointer<Render::ITexture> pane_;
     Hyprutils::Memory::CSharedPointer<Render::ITexture> wallpaper_;
     Quality quality_ = Quality::Full;
     long long wallpaperStamp_ = 0;
+
+    // 1x1 textures for edges and shadows (a mesh can only be textured, not tinted).
+    Hyprutils::Memory::CSharedPointer<Render::ITexture> accentEdge_, softEdge_, shade_;
+
+    struct Label {
+        std::string text;
+        bool current = false;
+        int pixels = 0;
+        int width = 0, height = 0;
+        Hyprutils::Memory::CSharedPointer<Render::ITexture> texture;
+    };
+    std::unordered_map<WorkspaceId, Label> labels_;
 };
 
 } // namespace prism

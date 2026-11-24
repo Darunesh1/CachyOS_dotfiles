@@ -55,3 +55,12 @@ First live trial: the plugin loads and works, but the cube could not be turned w
 * **Finger spin.** The core already had a horizontal turn; nothing fed it, and the three-finger horizontal swipe was still Hyprland's workspace swipe. The plugin now listens to Hyprland's cancellable `gesture.swipe.{begin,update,end}` events and owns a three-finger swipe from its first event to its last while the cube is fully open. The alternatives were a four-finger Lua gesture (no C++ risk, but a new gesture to learn and the real workspace still moves behind the cube) and leaving it as it was. Downside accepted: input handling now lives inside the compositor, and only a live trial can prove the cancel behaviour.
 * **Size.** The front face was a fixed 50 %; it now adapts to the workspace count (72 % down to 58 %).
 
+## Update 2026-11-24 (second live trial)
+
+The plugin works and the swipe turns the cube, but it looked flat and unreadable, clicking and scrolling did nothing, and it had not loaded at login.
+
+* **Login load.** `hl.plugin.load` called from Lua after the config has been read returns nil and loads nothing (reproduced in `nested.sh --autoload`). The loader now starts `hyprctl plugin load` as a child process, retries, and reports the reason. Alternative rejected: calling `hl.plugin.load` while the config is still being evaluated, which puts a plugin load inside config evaluation (a bad plugin could then break the config).
+* **Look.** Wallpaper backdrop with a dark gradient, sharper pictures (0.75 instead of 0.4 of the screen), shadows, outline, labels. Rounded corners were not done: the compositor's textured-mesh path rounds a box, not a perspective quad.
+* **Pointer.** Click and scroll are routed by a pure, tested router; press and release are cancelled as a pair because Hyprland drops a cancelled press from its bookkeeping.
+* **Power.** Two tiers, full and lite, chosen from two flag files. Alternative rejected: running `powerprofilesctl get` when the cube opens (a process spawn inside the compositor's callback).
+

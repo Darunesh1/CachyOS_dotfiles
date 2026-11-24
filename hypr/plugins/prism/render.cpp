@@ -3,6 +3,7 @@
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprgraphics/image/Image.hpp>
 
+#include <pango/pangocairo.h>
 #include <sys/stat.h>
 
 #include <atomic>
@@ -20,11 +21,74 @@ std::atomic<std::uint64_t> ready = 0;
 std::atomic<std::uint64_t> enqueues = 0;
 std::atomic<std::uint64_t> draws = 0;
 
+struct DrawLabel {
+    SP<Render::ITexture> texture;
+    CBox box;
+    float alpha;
+};
+
 struct DrawFace {
     SP<Render::ITexture> texture;
     std::vector<SMeshRenderVertex> vertices;
     std::vector<SMeshRenderVertex> wallVertices; // the wallpaper behind the picture; empty in lite
+    std::vector<SMeshRenderVertex> shadow[3];    // three growing, faint rings: a soft shadow
+    std::vector<SMeshRenderVertex> edge;         // a thin outline
+    bool current = false;                        // the workspace you are on: accent outline
+    std::optional<DrawLabel> label;
 };
+
+// A line segment of `thickness` pixels as two triangles, in the output's normalised coordinates.
+void ribbon(std::vector<SMeshRenderVertex>& out, ProjectedPoint a, ProjectedPoint b, double thickness,
+            double width, double height) {
+    const double ax = a.x * width, ay = a.y * height, bx = b.x * width, by = b.y * height;
+    const double length = std::hypot(bx - ax, by - ay);
+    if (length < 1e-6)
+        return;
+    const double nx = -(by - ay) / length * thickness / 2, ny = (bx - ax) / length * thickness / 2;
+    const auto put = [&](double x, double y) {
+        return SMeshRenderVertex{static_cast<float>(x / width), static_cast<float>(y / height), 0.5F, 0.5F};
+    };
+    out.insert(out.end(), {put(ax - nx, ay - ny), put(ax + nx, ay + ny), put(bx - nx, by - ny),
+                           put(bx - nx, by - ny), put(ax + nx, ay + ny), put(bx + nx, by + ny)});
+}
+
+// The face's outline, `grow` pixels outside the quad (negative: inside).
+std::vector<SMeshRenderVertex> outline(const ProjectedFace& face, double thickness, double grow, double width,
+                                       double height) {
+    ProjectedPoint corner[4] = {face.point(0, 0), face.point(1, 0), face.point(1, 1), face.point(0, 1)};
+    // Push each corner away from the centre of the quad: approximate, and enough for a border.
+    ProjectedPoint centre{(corner[0].x + corner[2].x) / 2, (corner[0].y + corner[2].y) / 2};
+    for (auto& c : corner) {
+        const double dx = (c.x - centre.x) * width, dy = (c.y - centre.y) * height;
+        const double length = std::hypot(dx, dy);
+        if (length > 1e-6) {
+            c.x += dx / length * grow / width;
+            c.y += dy / length * grow / height;
+        }
+    }
+    std::vector<SMeshRenderVertex> out;
+    for (int i = 0; i < 4; ++i)
+        ribbon(out, corner[i], corner[(i + 1) % 4], thickness, width, height);
+    return out;
+}
+
+// A filled quad grown by `grow` pixels, for the shadow rings.
+std::vector<SMeshRenderVertex> grown(const ProjectedFace& face, double grow, double width, double height) {
+    ProjectedPoint c[4] = {face.point(0, 0), face.point(1, 0), face.point(1, 1), face.point(0, 1)};
+    const ProjectedPoint centre{(c[0].x + c[2].x) / 2, (c[0].y + c[2].y) / 2};
+    for (auto& p : c) {
+        const double dx = (p.x - centre.x) * width, dy = (p.y - centre.y) * height;
+        const double length = std::hypot(dx, dy);
+        if (length > 1e-6) {
+            p.x += dx / length * grow / width;
+            p.y += dy / length * grow / height;
+        }
+    }
+    const auto put = [](ProjectedPoint p) {
+        return SMeshRenderVertex{static_cast<float>(p.x), static_cast<float>(p.y), 0.5F, 0.5F};
+    };
+    return {put(c[0]), put(c[3]), put(c[1]), put(c[1]), put(c[3]), put(c[2])};
+}
 
 // The part of the wallpaper that covers the output without stretching (cover fit).
 struct Cover {
@@ -67,8 +131,10 @@ std::vector<SMeshRenderVertex> mesh(const ProjectedFace& face, const Cover& cove
 
 class FacePass final : public IPassElement {
 public:
-    FacePass(std::vector<DrawFace> faces, double openness, SP<Render::ITexture> wallpaper, Cover cover)
-        : faces_(std::move(faces)), openness_(openness), wallpaper_(std::move(wallpaper)), cover_(cover) {}
+    FacePass(std::vector<DrawFace> faces, double openness, SP<Render::ITexture> wallpaper, Cover cover,
+             SP<Render::ITexture> accent, SP<Render::ITexture> soft, SP<Render::ITexture> shade)
+        : faces_(std::move(faces)), openness_(openness), wallpaper_(std::move(wallpaper)), cover_(cover),
+          accent_(std::move(accent)), soft_(std::move(soft)), shade_(std::move(shade)) {}
 
     const char* passName() override { return prism::passName; }
     ePassElementType type() override { return EK_CUSTOM; }
@@ -113,12 +179,25 @@ public:
                 : CHyprColor(0.075 - 0.05 * t, 0.095 - 0.062 * t, 0.15 - 0.09 * t, openness_);
             gl->renderRect(ctx, band, colour, {.damage = &ctx.m_data.damage});
         }
+        const auto a = static_cast<float>(openness_);
         for (const auto& face : faces_) {
+            if (shade_ && shade_->ok())
+                for (const auto& ring : face.shadow)
+                    if (!ring.empty())
+                        gl->renderTextureMesh(ctx, shade_, output, ring,
+                                              {.damage = &ctx.m_data.damage, .a = a, .allowDim = false});
             if (!face.wallVertices.empty() && wallpaper_ && wallpaper_->ok())
                 gl->renderTextureMesh(ctx, wallpaper_, output, face.wallVertices,
                                       {.damage = &ctx.m_data.damage, .allowDim = false});
             gl->renderTextureMesh(ctx, face.texture, output, face.vertices,
                                   {.damage = &ctx.m_data.damage, .allowDim = false});
+            const auto& line = face.current ? accent_ : soft_;
+            if (line && line->ok() && !face.edge.empty())
+                gl->renderTextureMesh(ctx, line, output, face.edge,
+                                      {.damage = &ctx.m_data.damage, .a = a, .allowDim = false});
+            if (face.label && face.label->texture && face.label->texture->ok())
+                gl->renderTexture(ctx, face.label->texture, face.label->box,
+                                  {.damage = &ctx.m_data.damage, .a = face.label->alpha * a, .allowDim = false});
         }
         gl->disableScissor();
         gl->blend(previousBlend);
@@ -130,6 +209,7 @@ private:
     double openness_;
     SP<Render::ITexture> wallpaper_;
     Cover cover_;
+    SP<Render::ITexture> accent_, soft_, shade_;
 };
 
 } // namespace
@@ -153,6 +233,19 @@ void FaceRenderer::enqueue(Render::CRenderContext& ctx, const Snapshot& state,
     const auto cover = glass ? coverFit(wallpaper_->m_size.x / std::max(1.0, wallpaper_->m_size.y),
                                         size.x / std::max(1.0, size.y))
                              : Cover{};
+    const auto solid = [](std::uint8_t r, std::uint8_t g, std::uint8_t b, std::uint8_t alpha) {
+        std::uint8_t pixel[] = {r, g, b, alpha};
+        return g_pHyprRenderer->createTexture(DRM_FORMAT_ABGR8888, pixel, 4, {1, 1});
+    };
+    if (!accentEdge_)
+        accentEdge_ = solid(138, 180, 248, 255);        // #8ab4f8, the Quickshell accent
+    if (!softEdge_)
+        softEdge_ = solid(115, 115, 115, 115);          // white at 45 %, premultiplied
+    if (!shade_)
+        shade_ = solid(0, 0, 0, 22);                    // black at 9 %: three rings add up to a soft shadow
+    const double outW = size.x, outH = size.y;
+    const double frontPixels = 0.62 * outW;
+
     std::vector<DrawFace> faces;
     for (const auto& face : projectFaces(workspaces, state.facePosition, state.openness)) {
         ++candidates;
@@ -169,14 +262,34 @@ void FaceRenderer::enqueue(Render::CRenderContext& ctx, const Snapshot& state,
         }
         if (tex && tex->ok()) {
             ++ready;
-            faces.push_back({std::move(tex), mesh(face), glass ? mesh(face, cover) : std::vector<SMeshRenderVertex>{}});
+            DrawFace draw{std::move(tex), mesh(face), glass ? mesh(face, cover) : std::vector<SMeshRenderVertex>{}};
+            const auto lite = quality_ == Quality::Lite;
+            if (!lite) {
+                draw.shadow[0] = grown(face, 26, outW, outH);
+                draw.shadow[1] = grown(face, 16, outW, outH);
+                draw.shadow[2] = grown(face, 7, outW, outH);
+            }
+            draw.edge = outline(face, 2.0, 1.0, outW, outH);
+            draw.current = state.originWorkspace && *state.originWorkspace == face.workspace;
+            if (const auto label = labels_.find(face.workspace); label != labels_.end() && label->second.texture) {
+                const auto left = face.point(0, 1), right = face.point(1, 1);
+                const double facePixels = std::abs(right.x - left.x) * outW;
+                const double scale = std::clamp(facePixels / frontPixels, 0.5, 1.0);
+                const double w = label->second.width * scale, h = label->second.height * scale;
+                const double cx = (left.x + right.x) / 2 * outW;
+                const double by = std::max(left.y, right.y) * outH;
+                draw.label = DrawLabel{label->second.texture, CBox{cx - w / 2, by + 12 * scale, w, h},
+                                       static_cast<float>(0.55 + 0.45 * scale)};
+            }
+            faces.push_back(std::move(draw));
         }
     }
     if (!faces.empty())
         ++enqueues;
     if (!faces.empty())
         Render::IHyprRenderer::addPassElement(
-            ctx, makeUnique<FacePass>(std::move(faces), state.openness, wallpaper_, cover));
+            ctx, makeUnique<FacePass>(std::move(faces), state.openness, wallpaper_, cover, accentEdge_, softEdge_,
+                                      shade_));
 }
 
 void FaceRenderer::reset() {
@@ -185,6 +298,89 @@ void FaceRenderer::reset() {
     pane_.reset();
     wallpaper_.reset();
     wallpaperStamp_ = 0;
+    accentEdge_.reset();
+    softEdge_.reset();
+    shade_.reset();
+    labels_.clear();
+}
+
+SP<Render::ITexture> makeLabelTexture(const std::string& text, bool current, int pixels, int& width, int& height) {
+    cairo_surface_t* probe = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 1, 1);
+    cairo_t* measure = cairo_create(probe);
+    PangoLayout* layout = pango_cairo_create_layout(measure);
+    PangoFontDescription* font = pango_font_description_from_string("JetBrainsMono Nerd Font, Sans Bold");
+    pango_font_description_set_absolute_size(font, pixels * PANGO_SCALE);
+    pango_layout_set_font_description(layout, font);
+    pango_layout_set_text(layout, text.c_str(), -1);
+    int textWidth = 0, textHeight = 0;
+    pango_layout_get_pixel_size(layout, &textWidth, &textHeight);
+
+    const double padX = pixels * 0.9, padY = pixels * 0.32;
+    width = static_cast<int>(std::ceil(textWidth + 2 * padX));
+    height = static_cast<int>(std::ceil(textHeight + 2 * padY));
+    SP<Render::ITexture> texture;
+    if (width > 0 && height > 0 && width < 4096) {
+        cairo_surface_t* surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+        if (cairo_t* cr = cairo_create(surface)) {
+            const double r = height / 2.0;
+            cairo_new_sub_path(cr);
+            cairo_arc(cr, width - r, r, r, -M_PI / 2, M_PI / 2);
+            cairo_arc(cr, r, r, r, M_PI / 2, 3 * M_PI / 2);
+            cairo_close_path(cr);
+            if (current)
+                cairo_set_source_rgba(cr, 0.54, 0.71, 0.97, 0.94);
+            else
+                cairo_set_source_rgba(cr, 0.02, 0.03, 0.06, 0.55);
+            cairo_fill(cr);
+            if (current)
+                cairo_set_source_rgba(cr, 0.04, 0.06, 0.10, 1.0);
+            else
+                cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.92);
+            cairo_move_to(cr, padX, padY);
+            PangoLayout* draw = pango_cairo_create_layout(cr);
+            pango_layout_set_font_description(draw, font);
+            pango_layout_set_text(draw, text.c_str(), -1);
+            pango_cairo_show_layout(cr, draw);
+            g_object_unref(draw);
+            cairo_destroy(cr);
+        }
+        cairo_surface_flush(surface);
+        texture = g_pHyprRenderer->createTexture(surface);
+        cairo_surface_destroy(surface);
+    }
+    g_object_unref(layout);
+    pango_font_description_free(font);
+    cairo_destroy(measure);
+    cairo_surface_destroy(probe);
+    return texture;
+}
+
+void FaceRenderer::prepareLabels(std::span<const FaceTexture> faces, std::optional<WorkspaceId> origin, int pixels) {
+    if (!g_pHyprRenderer)
+        return;
+    pixels = std::clamp(pixels, 12, 40);
+    std::erase_if(labels_, [&](const auto& entry) {
+        return std::ranges::find(faces, entry.first, &FaceTexture::workspace) == faces.end();
+    });
+    bool madeTexture = false;
+    for (const auto& face : faces) {
+        std::string text = face.name.empty() ? std::to_string(face.workspace) : face.name;
+        text += face.windows == 0 ? "  ·  empty" : face.windows == 1 ? "  ·  1 window"
+                                                                     : "  ·  " + std::to_string(face.windows) + " windows";
+        const bool current = origin && *origin == face.workspace;
+        auto& label = labels_[face.workspace];
+        if (label.texture && label.text == text && label.current == current && label.pixels == pixels)
+            continue;
+        if (!madeTexture) {
+            if (const auto gl = g_pHyprRenderer->glBackend(); gl.valid())
+                gl->makeEGLCurrent();
+            madeTexture = true;
+        }
+        label.text = text;
+        label.current = current;
+        label.pixels = pixels;
+        label.texture = makeLabelTexture(text, current, pixels, label.width, label.height);
+    }
 }
 
 void FaceRenderer::setQuality(Quality quality) {
