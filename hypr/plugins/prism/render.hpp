@@ -17,6 +17,17 @@ class ITexture;
 
 namespace prism {
 
+// full: wallpaper backdrop, sharp pictures. lite: plain gradient and small pictures, for
+// Power Saving and Game Mode (see hypr/config/prism_native.lua, setQuality).
+enum class Quality { Full, Lite };
+
+// How much of the output a captured workspace picture covers on each axis when drawn at
+// its largest, and the capture scale each tier uses. Full is sharp enough to read text on
+// the front face at 1920x1080 (the front face is about 70 % of the screen wide).
+[[nodiscard]] constexpr double captureScale(Quality quality) {
+    return quality == Quality::Full ? 0.75 : 0.4;
+}
+
 struct RenderDiagnostics {
     std::uint64_t stage = 0;
     std::uint64_t attempted = 0;
@@ -24,6 +35,7 @@ struct RenderDiagnostics {
     std::uint64_t ready = 0;
     std::uint64_t enqueued = 0;
     std::uint64_t drawn = 0;
+    std::uint64_t backdrop = 0; // 1 when the wallpaper texture is loaded
 };
 
 void noteRenderStage() noexcept;
@@ -110,8 +122,19 @@ public:
                  std::span<const WorkspaceId> workspaces, std::span<const FaceTexture> textures = {});
     void reset();
 
+    void setQuality(Quality quality);
+    [[nodiscard]] Quality quality() const { return quality_; }
+    [[nodiscard]] bool hasBackdrop() const { return wallpaper_ != nullptr; }
+    // Loads or frees the wallpaper to match the quality. Decoding a JPEG takes tens of
+    // milliseconds, so call it from a Lua callback (gesture start), never from the render
+    // pass. Cheap when nothing changed (one stat of the file).
+    void prepareBackdrop();
+
 private:
     Hyprutils::Memory::CSharedPointer<Render::ITexture> pane_;
+    Hyprutils::Memory::CSharedPointer<Render::ITexture> wallpaper_;
+    Quality quality_ = Quality::Full;
+    long long wallpaperStamp_ = 0;
 };
 
 } // namespace prism

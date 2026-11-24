@@ -10,6 +10,7 @@ Usage: nested.sh --check
        nested.sh --driver [PLUGIN]
        nested.sh --safety [PLUGIN]
        nested.sh --stress [PLUGIN]
+       nested.sh --autoload [PLUGIN]
 
 --check       Start an isolated Hyprland and verify its Wayland output.
 --lifecycle   Verify Prism load and unload on the same isolated instance.
@@ -17,6 +18,8 @@ Usage: nested.sh --check
 --screenshot  Open Prism and save a PNG of the nested output before unloading.
 --driver      Open three windows, then drive Prism through hypr/config/prism_native.lua
               (swipe callbacks, keys submap, watcher, selection, watchdog reset).
+--autoload    Load the plugin the way the config does (hl.plugin.load from the Lua driver,
+              prism_native.start with its retries) instead of with hyprctl.
 --stress      100 real-time open/close cycles with three windows; reports memory growth,
               idle cost while closed, frame time and capture time.
 --safety      Open three windows, then abuse Prism while open: new window, workspace
@@ -303,6 +306,47 @@ return s.phase" opening
     printf 'Driver active workspace after close: %s (submap released)\n' "$out"
     # Watchdog and kill switch.
     expect_lua 'Driver reset' "_G.drv.reset(); return hl.plugin.prism.snapshot().phase" closed
+
+    # Clicks and scrolling, through the same routers the mouse listeners use. Three
+    # workspaces show only the front face, so the side face is reached by scrolling.
+    expect_lua 'Pointer open' "local p = hl.plugin.prism; assert(p.setWorkspaces({1, 2, 3})); assert(p.open(1)); return 'ok'" ok
+    wait_phase open
+    _G_front() { nested_ctl repl 'local s = hl.plugin.prism.snapshot(); return tostring(s.frontWorkspace)'; }
+    expect_lua 'Pointer scroll turns' "assert(hl.plugin.prism.pointerScroll(15, true)); return 'ok'" ok
+    for (( i = 0; i < 50; ++i )); do
+        [[ $(nested_ctl repl 'return tostring(hl.plugin.prism.snapshot().animating)') == false ]] && break
+        /usr/bin/sleep 0.1
+    done
+    [[ $(_G_front) == 2 ]] || fail "a scroll step did not turn to workspace 2 (front: $(_G_front))"
+    printf 'Pointer scroll turned the cube to workspace 2\n'
+    expect_lua 'Pointer click backdrop' "assert(hl.plugin.prism.pointerClick(0.02, 0.02)); return 'ok'" ok
+    wait_phase closed
+    expect_lua 'Pointer backdrop selects nothing' "return tostring(hl.plugin.prism.takeSelection())" nil
+    expect_lua 'Pointer reopen' "local p = hl.plugin.prism; assert(p.open(1)); return 'ok'" ok
+    wait_phase open
+    expect_lua 'Pointer click front' "assert(hl.plugin.prism.pointerClick(0.5, 0.5)); return 'ok'" ok
+    wait_phase closed
+    expect_lua 'Pointer front click chose workspace 1' "local c = hl.plugin.prism.renderDiagnostics().clicksOwned; return tostring(hl.plugin.prism.takeSelection())" 1
+}
+
+# The auto-load path of the real config: opted in by a flag file, loaded from Lua. This is
+# the path that did not load at login on 2026-11-24; hyprctl plugin load (used by the other
+# modes) worked, so it needs its own test.
+test_autoload() {
+    local i loaded=
+    /usr/bin/mkdir -p /run/prism/prism
+    : >/run/prism/prism-native
+    expect_lua 'Autoload module' "_G.drv = dofile('/prism-test/prism_native.lua'); return tostring(_G.drv.enabled())" false
+    nested_ctl repl "_G.drv.start(); return 'scheduled'" >/dev/null || fail 'could not start the loader'
+    for (( i = 0; i < 80; ++i )); do
+        loaded=$(nested_ctl repl 'return tostring(hl.plugin ~= nil and hl.plugin.prism ~= nil)' 2>/dev/null || true)
+        [[ $loaded == true ]] && break
+        /usr/bin/sleep 0.1
+    done
+    [[ $loaded == true ]] || fail "the plugin was not loaded by prism_native.start within 8 s ($(/usr/bin/cat /run/prism/prism/load-result 2>&1); plugin list: $(nested_ctl -j plugin list 2>&1); hl.plugin keys: $(nested_ctl repl 'local k={} for n in pairs(hl.plugin) do k[#k+1]=n end return table.concat(k,",")' 2>&1))"
+    printf 'Autoload: loaded by prism_native.start after about %s ms\n' "$(( i * 100 ))"
+    expect_lua 'Autoload usable' "return hl.plugin.prism.snapshot().phase" closed
+    expect_lua 'Autoload quality' "return hl.plugin.prism.renderDiagnostics().quality" full
 }
 
 alive() { expect_lua "Alive after $1" 'return 6 * 7' 42 >/dev/null; }
@@ -494,16 +538,19 @@ LUA
     fi
 
     for (( cycle = 1; cycle <= cycles; ++cycle )); do
-        reply=$(nested_ctl plugin load "$plugin") || fail "cycle $cycle load: $reply"
-        [[ $reply == ok ]] || fail "cycle $cycle load: $reply"
-        plugins=$(nested_ctl -j plugin list) || fail "cycle $cycle: could not read loaded plugins"
-        /usr/bin/jq -e 'type == "array" and length == 1 and .[0].name == "Prism"' <<<"$plugins" >/dev/null \
-            || fail "cycle $cycle: expected Prism in plugin list: $plugins"
+        if [[ $mode != --autoload ]]; then
+            reply=$(nested_ctl plugin load "$plugin") || fail "cycle $cycle load: $reply"
+            [[ $reply == ok ]] || fail "cycle $cycle load: $reply"
+            plugins=$(nested_ctl -j plugin list) || fail "cycle $cycle: could not read loaded plugins"
+            /usr/bin/jq -e 'type == "array" and length == 1 and .[0].name == "Prism"' <<<"$plugins" >/dev/null \
+                || fail "cycle $cycle: expected Prism in plugin list: $plugins"
+        fi
 
         case $mode in
             --gesture) test_gestures ;;
             --screenshot) capture_nested "${monitor%% *}" ;;
             --driver) test_driver ;;
+            --autoload) test_autoload ;;
             --safety) test_safety ;;
             --stress) test_stress ;;
         esac
@@ -513,7 +560,7 @@ LUA
         plugins=$(nested_ctl -j plugin list) || fail "cycle $cycle: could not read unloaded plugins"
         /usr/bin/jq -e '. == []' <<<"$plugins" >/dev/null \
             || fail "cycle $cycle: expected an empty plugin list: $plugins"
-        if [[ $mode == --gesture || $mode == --screenshot || $mode == --driver || $mode == --safety || $mode == --stress ]]; then
+        if [[ $mode == --gesture || $mode == --screenshot || $mode == --driver || $mode == --safety || $mode == --stress || $mode == --autoload ]]; then
             expect_lua 'Prism Lua namespace after unload' 'return type(hl.plugin.prism)' nil
         fi
         printf 'Cycle %s/%s on PID %s: [] -> [Prism] -> []\n' "$cycle" "$cycles" "$child_pid"
@@ -537,7 +584,7 @@ case $mode in
     --check)
         [[ $# == 1 ]] || fail 'usage: nested.sh --check'
         ;;
-    --lifecycle|--gesture|--screenshot|--driver|--safety|--stress)
+    --lifecycle|--gesture|--screenshot|--driver|--safety|--stress|--autoload)
         shift
         cycles=1
         if [[ $mode == --lifecycle ]]; then
@@ -606,6 +653,31 @@ done
 
 script_path=$(/usr/bin/realpath -e -- "$0")
 
+# A test wallpaper, mounted where the plugin looks for yours (HOME is /run/prism/home in the
+# sandbox). A left-to-right magenta to teal gradient: nothing like the dark clear colour or
+# the window colours, so a screenshot can tell the backdrop from a flat fill. Optional: with
+# no Python Pillow the nested instance simply has no wallpaper (lite look).
+wallpaper_mount=()
+wallpaper_file=
+if /usr/bin/python3 -I -c 'import PIL' 2>/dev/null; then
+    wallpaper_file=$(/usr/bin/mktemp --tmpdir prism-test-wallpaper.XXXXXX.jpg)
+    trap '/usr/bin/rm -f -- "$wallpaper_file"' EXIT
+    /usr/bin/python3 -I - "$wallpaper_file" <<'PY' || wallpaper_file=
+import sys
+from PIL import Image
+w, h = 1924, 982
+im = Image.new('RGB', (w, h))
+px = im.load()
+for x in range(w):
+    t = x / (w - 1)
+    c = (int(200 * (1 - t) + 20 * t), int(40 * (1 - t) + 160 * t), int(160 * (1 - t) + 200 * t))
+    for y in range(h):
+        px[x, y] = c
+im.save(sys.argv[1], 'JPEG', quality=90)
+PY
+    [[ -n $wallpaper_file ]] && wallpaper_mount=(--ro-bind "$wallpaper_file" /run/prism/home/Pictures/Wallpaper/current_wallpaper)
+fi
+
 # Aquamarine tries DRM before Wayland. Keep DRM card devices and seat sockets
 # outside the namespace, while letting the Wayland backend open its render node.
 sandbox=(/usr/bin/bwrap \
@@ -616,20 +688,22 @@ sandbox=(/usr/bin/bwrap \
     --ro-bind /sys /sys --proc /proc --dev /dev --dir /dev/dri \
     "${render_nodes[@]}" \
     --tmpfs /tmp --tmpfs /run --dir /run/prism --chmod 0700 /run/prism \
-    --dir /run/prism/home --ro-bind "$parent_socket" /run/prism-parent \
+    --dir /run/prism/home "${wallpaper_mount[@]}" --ro-bind "$parent_socket" /run/prism-parent \
     --ro-bind "$script_path" /prism-test/nested.sh "${plugin_mount[@]}" \
     --chdir /run/prism/home --setenv PATH /usr/bin --setenv HOME /run/prism/home \
     --setenv XDG_RUNTIME_DIR /run/prism --setenv WAYLAND_DISPLAY /run/prism-parent \
     --setenv AQ_BACKENDS "${PRISM_NESTED_BACKEND:-headless}" --setenv PRISM_NESTED_BACKEND "${PRISM_NESTED_BACKEND:-headless}" --setenv HYPRLAND_NO_RT 1 --setenv HYPRLAND_NO_SD_VARS 1 --setenv HYPRLAND_NO_SD_NOTIFY 1 \
-    --setenv GSETTINGS_BACKEND memory --setenv PRISM_TEST_WINDOWS "$test_windows" --setenv PRISM_STRESS_VERBOSE "${PRISM_STRESS_VERBOSE:-0}" --setenv PRISM_STRESS_CYCLES "${PRISM_STRESS_CYCLES:-100}" -- \
+    --setenv PRISM_NATIVE_FLAG /run/prism/prism-native --setenv PRISM_NATIVE_SO /prism-test/prism.so --setenv GSETTINGS_BACKEND memory --setenv PRISM_TEST_WINDOWS "$test_windows" --setenv PRISM_STRESS_VERBOSE "${PRISM_STRESS_VERBOSE:-0}" --setenv PRISM_STRESS_CYCLES "${PRISM_STRESS_CYCLES:-100}" -- \
     /usr/bin/bash /prism-test/nested.sh --inside "$mode" "$cycles")
 
 if [[ $mode != --screenshot ]]; then
-    exec "${sandbox[@]}"
+    # Not exec: the EXIT trap must remove the temporary wallpaper.
+    "${sandbox[@]}"
+    exit $?
 fi
 
 screenshot_temp=$(/usr/bin/mktemp --tmpdir="$screenshot_dir" .prism-screenshot.XXXXXX)
-trap '/usr/bin/rm -f -- "$screenshot_temp"' EXIT
+trap '/usr/bin/rm -f -- "$screenshot_temp" "$wallpaper_file"' EXIT
 "${sandbox[@]}" >"$screenshot_temp"
 [[ $(/usr/bin/file -b --mime-type -- "$screenshot_temp") == image/png ]] \
     || fail 'the nested capture did not produce a PNG'

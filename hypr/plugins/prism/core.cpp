@@ -260,6 +260,23 @@ bool Core::rotate(int faceDelta) {
     return true;
 }
 
+bool Core::rotateTo(WorkspaceId workspace) {
+    if (phase() != Phase::Open || workspaces_.size() < 2)
+        return false;
+    const auto position = positionOf(workspaces_, workspace);
+    if (!position)
+        return false;
+
+    const auto reference = gesture_ ? faceCenter(facePosition_) : targetFacePosition_;
+    gesture_.reset();
+    targetFacePosition_ = nearestPosition(*position, reference, workspaces_.size());
+    return true;
+}
+
+std::optional<WorkspaceId> Core::targetFront() const {
+    return workspaceAt(workspaces_, gesture_ ? facePosition_ : targetFacePosition_);
+}
+
 void Core::reset() {
     gesture_.reset();
     originWorkspace_.reset();

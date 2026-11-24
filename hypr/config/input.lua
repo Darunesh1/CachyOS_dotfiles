@@ -84,7 +84,7 @@ end
 -- otherwise everything below is exactly the Quickshell path. It loads a moment after
 -- the config finishes, never during it, so a bad plugin cannot break the config.
 local native = require("config/prism_native")
-hl.timer(function() native.load() end, { type = "oneshot", timeout = 800 })
+native.start()
 
 local function prism_gesture(dir)
     local feed, acc, v, last_p, last_t

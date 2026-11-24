@@ -1,5 +1,7 @@
 #include "content.hpp"
 
+#include <algorithm>
+
 #include <hyprland/src/state/WorkspaceState.hpp>
 #include <hyprland/src/desktop/state/WindowState.hpp>
 #include <hyprland/src/desktop/view/window/Window.hpp>
@@ -62,7 +64,7 @@ PHLWORKSPACE findWorkspace(WorkspaceId id) {
     return nullptr;
 }
 
-std::optional<FaceTexture> captureWorkspace(PHLWORKSPACE workspace) {
+std::optional<FaceTexture> captureWorkspace(PHLWORKSPACE workspace, double scale, bool transparentBackground) {
     if (!workspace || !workspace->numberedID() || !g_pHyprRenderer || g_pHyprRenderer->context().active() ||
         !g_pSessionLockManager || g_pSessionLockManager->isSessionLocked())
         return std::nullopt;
@@ -86,9 +88,12 @@ std::optional<FaceTexture> captureWorkspace(PHLWORKSPACE workspace) {
             return std::nullopt;
     }
 
-    const double scale = std::min(0.5, 768.0 / std::max(size.x, size.y));
-    const int width = std::max(1, static_cast<int>(std::round(size.x * scale)));
-    const int height = std::max(1, static_cast<int>(std::round(size.y * scale)));
+    // Long side capped at 1600 px: sharp on the front face, bounded in memory (a 1600x900
+    // picture is 5.5 MB, so six workspaces stay under 35 MB).
+    const double fraction = std::clamp(scale, 0.1, 1.0);
+    const double capped = std::min(fraction, 1600.0 / std::max(size.x, size.y));
+    const int width = std::max(1, static_cast<int>(std::round(size.x * capped)));
+    const int height = std::max(1, static_cast<int>(std::round(size.y * capped)));
     gl->makeEGLCurrent();
     Render::GL::CFramebufferBindingGuard bindings{gl};
     auto framebuffer = g_pHyprRenderer->createFB("Prism workspace preview");
@@ -120,7 +125,11 @@ std::optional<FaceTexture> captureWorkspace(PHLWORKSPACE workspace) {
     ctx.m_data.renderingTransformedSource = true;
     ctx.m_data.fbSize = size;
     g_pHyprRenderer->setProjectionType(ctx, Render::RPT_EXPORT);
-    g_pHyprRenderer->draw(ctx, CClearPassElement::SClearData{CHyprColor(0.12, 0.15, 0.20, 1.0)}, damage);
+    g_pHyprRenderer->draw(
+        ctx,
+        CClearPassElement::SClearData{transparentBackground ? CHyprColor(0.0, 0.0, 0.0, 0.0)
+                                                            : CHyprColor(0.12, 0.15, 0.20, 1.0)},
+        damage);
     for (const bool floating : {false, true}) {
         for (const auto& window : windows) {
             if (belongs(window) && window->isFloating() == floating)
@@ -133,6 +142,14 @@ std::optional<FaceTexture> captureWorkspace(PHLWORKSPACE workspace) {
     if (!texture || !texture->ok())
         return std::nullopt;
     return FaceTexture{static_cast<WorkspaceId>(*workspace->numberedID()), std::move(texture)};
+}
+
+void ContentCache::configure(double scale, bool transparentBackground) noexcept {
+    if (scale == scale_ && transparentBackground == transparent_)
+        return;
+    scale_ = scale;
+    transparent_ = transparentBackground;
+    clear();
 }
 
 void ContentCache::invalidateAll() noexcept {
@@ -170,7 +187,7 @@ void ContentCache::refresh(std::span<const WorkspaceId> workspaces, std::optiona
             ++stats_.reused;
             continue;
         }
-        auto captured = captureWorkspace(findWorkspace(id));
+        auto captured = captureWorkspace(findWorkspace(id), scale_, transparent_);
         // A failed capture must not leave an old picture of a changed workspace.
         std::erase_if(faces_, [id](const FaceTexture& face) { return face.workspace == id; });
         if (!captured) {

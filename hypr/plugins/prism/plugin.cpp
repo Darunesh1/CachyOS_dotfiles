@@ -1,12 +1,16 @@
 #include "content.hpp"
 #include "core.hpp"
 #include "render.hpp"
+#include "pointer.hpp"
 #include "swipe.hpp"
 
 #include <hyprland/src/plugins/PluginAPI.hpp>
 #include <hyprland/src/state/MonitorState.hpp>
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/managers/SessionLockManager.hpp>
+#include <hyprland/src/managers/input/InputManager.hpp>
+#include <hyprland/src/output/Monitor.hpp>
+#include <linux/input-event-codes.h>
 #include <lua.hpp>
 
 #include <algorithm>
@@ -14,6 +18,7 @@
 #include <chrono>
 #include <cmath>
 #include <limits>
+#include <set>
 #include <stdexcept>
 #include <string_view>
 
@@ -58,6 +63,14 @@ prism::ContentCache content;
 std::vector<CHyprSignalListener> invalidators;
 std::vector<CHyprSignalListener> swipeListeners;
 prism::SwipeRouter swipeRouter;
+std::vector<CHyprSignalListener> pointerListeners;
+prism::PointerRouter pointerRouter;
+// Buttons whose PRESS was swallowed while the cube was open. Hyprland drops the press from
+// its bookkeeping when cancelled, so the matching release must be swallowed too, and a
+// release whose press was NOT swallowed must pass: otherwise an application would be left
+// thinking the button is still down.
+std::set<std::uint32_t> swallowedButtons;
+std::uint64_t clicksOwned = 0;
 std::uint32_t lastSwipeMs = 0;
 std::uint64_t swipesOwned = 0;
 CHyprSignalListener renderListener;
@@ -93,6 +106,8 @@ void resetAll() noexcept {
     try {
         core.reset();
         swipeRouter.reset();
+        pointerRouter.reset();
+        swallowedButtons.clear();
         content.clear();
         lastFrame = {};
     } catch (...) {
@@ -115,6 +130,16 @@ void installInvalidators() {
     // layout changed), which closed the cube under the user's hands.
 }
 
+// One place that applies a quality tier, so the renderer and the picture cache never
+// disagree about it. Cheap when unchanged.
+void applyQuality(prism::Quality quality) noexcept {
+    try {
+        renderer.setQuality(quality);
+        content.configure(prism::captureScale(quality), quality == prism::Quality::Full);
+    } catch (...) {
+    }
+}
+
 void requestFrame() noexcept {
     if (!State::monitorState() || !g_pHyprRenderer)
         return;
@@ -127,6 +152,81 @@ void requestFrame() noexcept {
 // event whose `cancelled` flag is set before its own gesture code sees it, so setting it
 // for every event of an owned swipe keeps the real workspace swipe from also running.
 // Nothing here may throw into the compositor; on any error the swipe is not owned.
+// The cursor as a fraction of the monitor it is on, the coordinates the faces are projected
+// in. False when it cannot be worked out, in which case the click is simply not ours.
+bool cursorOnOutput(double& x, double& y) noexcept {
+    if (!g_pInputManager || !State::monitorState())
+        return false;
+    const auto cursor = g_pInputManager->getMouseCoordsInternal();
+    for (const auto& monitor : State::monitorState()->monitors()) {
+        if (!monitor || monitor->m_size.x < 1 || monitor->m_size.y < 1)
+            continue;
+        const auto local = cursor - monitor->m_position;
+        if (local.x >= 0 && local.y >= 0 && local.x < monitor->m_size.x && local.y < monitor->m_size.y) {
+            x = local.x / monitor->m_size.x;
+            y = local.y / monitor->m_size.y;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool sessionLocked() noexcept {
+    return !g_pSessionLockManager || g_pSessionLockManager->isSessionLocked();
+}
+
+// Clicks and scrolling while the cube is open (see pointer.hpp). Same rules as the swipe: all
+// or nothing per click, nothing throws into the compositor, the cursor still moves.
+void installPointer() {
+    auto& mouse = Event::bus()->m_events.input.mouse;
+    pointerListeners.push_back(mouse.button.listen([](IPointer::SButtonEvent e, Event::SCallbackInfo& info) {
+        try {
+            if (e.state == WL_POINTER_BUTTON_STATE_PRESSED) {
+                if (sessionLocked() || swipeRouter.owning() || core.snapshot().phase != prism::Phase::Open)
+                    return;
+                double x = 0, y = 0;
+                if (e.button == BTN_LEFT && !cursorOnOutput(x, y))
+                    return;
+                if (e.button == BTN_LEFT)
+                    pointerRouter.press(core, x, y);
+                swallowedButtons.insert(e.button);
+                info.cancelled = true;
+                return;
+            }
+            // Release: ours only when its press was.
+            if (swallowedButtons.erase(e.button) == 0)
+                return;
+            info.cancelled = true;
+            if (e.button == BTN_LEFT) {
+                double x = 0, y = 0;
+                const bool known = cursorOnOutput(x, y);
+                if (known && pointerRouter.release(core, x, y)) {
+                    ++clicksOwned;
+                    lastFrame = {};
+                    requestFrame();
+                } else {
+                    pointerRouter.reset();
+                }
+            }
+        } catch (...) {
+            pointerRouter.reset();
+        }
+    }));
+    pointerListeners.push_back(mouse.axis.listen([](IPointer::SAxisEvent e, Event::SCallbackInfo& info) {
+        try {
+            if (sessionLocked() || swipeRouter.owning())
+                return;
+            const bool wheel = e.source == WL_POINTER_AXIS_SOURCE_WHEEL;
+            if (pointerRouter.scroll(core, e.delta, wheel, e.timeMs)) {
+                info.cancelled = true;
+                requestFrame();
+            }
+        } catch (...) {
+            pointerRouter.reset();
+        }
+    }));
+}
+
 void installSwipe() {
     auto& swipe = Event::bus()->m_events.gesture.swipe;
     swipeListeners.push_back(swipe.begin.listen([](IPointer::SSwipeBeginEvent e, Event::SCallbackInfo& info) {
@@ -290,6 +390,7 @@ int begin(lua_State* state) noexcept {
         // never an old picture of it.
         try {
             const Stopwatch timer;
+            renderer.prepareBackdrop();
             content.refresh(core.workspaces(), lua_tointeger(state, 2));
             noteCapture(timer.ns());
         } catch (...) {
@@ -308,6 +409,7 @@ int open(lua_State* state) noexcept {
     if (accepted) {
         try {
             const Stopwatch timer;
+            renderer.prepareBackdrop();
             content.refresh(core.workspaces(), current);
             noteCapture(timer.ns());
         } catch (...) {
@@ -447,12 +549,65 @@ int renderDiagnostics(lua_State* state) noexcept {
     // events never reached it.
     lua_pushinteger(state, static_cast<lua_Integer>(swipesOwned));
     lua_setfield(state, -2, "swipesOwned");
+    lua_pushinteger(state, static_cast<lua_Integer>(clicksOwned));
+    lua_setfield(state, -2, "clicksOwned");
+    lua_pushboolean(state, renderer.hasBackdrop());
+    lua_setfield(state, -2, "backdrop");
+    lua_pushstring(state, renderer.quality() == prism::Quality::Full ? "full" : "lite");
+    lua_setfield(state, -2, "quality");
     return 1;
+}
+
+int setQuality(lua_State* state) noexcept {
+    if (lua_type(state, 1) != LUA_TSTRING)
+        return pushResult(state, false);
+    const std::string_view name{lua_tostring(state, 1)};
+    if (name == "full")
+        applyQuality(prism::Quality::Full);
+    else if (name == "lite")
+        applyQuality(prism::Quality::Lite);
+    else
+        return pushResult(state, false);
+    return pushResult(state, true);
+}
+
+// The same routers the mouse listeners use, callable from Lua: the nested test cannot make
+// the compositor deliver a pointer event, so it drives the click logic through these. They
+// do NOT go through Hyprland's event path (that is only proven by a live click).
+int pointerClick(lua_State* state) noexcept {
+    double x, y;
+    if (!readFiniteNumber(state, 1, x) || !readFiniteNumber(state, 2, y))
+        return pushResult(state, false);
+    try {
+        const bool pressed = pointerRouter.press(core, x, y);
+        const bool released = pointerRouter.release(core, x, y);
+        requestFrame();
+        return pushResult(state, pressed && released);
+    } catch (...) {
+        return pushResult(state, false);
+    }
+}
+
+int pointerScroll(lua_State* state) noexcept {
+    double delta;
+    if (!readFiniteNumber(state, 1, delta))
+        return pushResult(state, false);
+    try {
+        static std::uint32_t fakeClock = 100000;
+        fakeClock += 1000;
+        const bool owned = pointerRouter.scroll(core, delta, lua_toboolean(state, 2) != 0, fakeClock);
+        requestFrame();
+        return pushResult(state, owned);
+    } catch (...) {
+        return pushResult(state, false);
+    }
 }
 
 int reset(lua_State* state) noexcept {
     core.reset();
     swipeRouter.reset();
+    pointerRouter.reset();
+    swallowedButtons.clear();
     lastFrame = {};
     requestFrame();
     return pushResult(state, true);
@@ -480,6 +635,9 @@ constexpr std::array luaBindings{
     LuaBinding{"tick", tick},
     LuaBinding{"snapshot", snapshot},
     LuaBinding{"renderDiagnostics", renderDiagnostics},
+    LuaBinding{"setQuality", setQuality},
+    LuaBinding{"pointerClick", pointerClick},
+    LuaBinding{"pointerScroll", pointerScroll},
     LuaBinding{"reset", reset},
     LuaBinding{"takeSelection", takeSelection},
 };
@@ -530,10 +688,13 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         renderListener = Event::bus()->m_events.render.stage.listen(onRenderStage);
         installInvalidators();
         installSwipe();
+        installPointer();
+        applyQuality(prism::Quality::Full);
     } catch (...) {
         renderListener.reset();
         invalidators.clear();
         swipeListeners.clear();
+        pointerListeners.clear();
         unregisterBindings(handle, luaBindings.size());
         pluginHandle = nullptr;
         throw;
@@ -545,7 +706,10 @@ APICALL EXPORT void PLUGIN_EXIT() {
     renderListener.reset();
     invalidators.clear();
     swipeListeners.clear();
+    pointerListeners.clear();
     swipeRouter.reset();
+    pointerRouter.reset();
+    swallowedButtons.clear();
     content.clear();
     renderer.reset();
     if (pluginHandle) {

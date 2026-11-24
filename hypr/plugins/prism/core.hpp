@@ -34,10 +34,16 @@ public:
     bool open(WorkspaceId current);
     bool close(bool selectFront);
     bool rotate(int faceDelta);
+    // Turn the cube so that `workspace` is the front face, by the shortest way round.
+    // False when the cube is not open or the workspace is not a face.
+    bool rotateTo(WorkspaceId workspace);
     void reset();
 
     void tick(double dtSeconds);
     [[nodiscard]] Snapshot snapshot() const;
+    // The face the cube is turning TO (what Enter would choose), not the one in front this
+    // frame. A click during a turn must compare against this.
+    [[nodiscard]] std::optional<WorkspaceId> targetFront() const;
     // A committed close delivers its workspace once, after the animation ends.
     [[nodiscard]] std::optional<WorkspaceId> takeSelection();
 

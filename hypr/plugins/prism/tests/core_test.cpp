@@ -195,11 +195,38 @@ void testWorkspaceChangesAndFlatTiming() {
 
 } // namespace
 
+void testRotateToAndTargetFront() {
+    auto core = openOverview(); // faces {2, 11, 7}, front 2
+    check(core.targetFront() == 2, "target front should start as the opened workspace");
+    check(core.rotateTo(7), "rotateTo refused a face");
+    check(core.targetFront() == 7, "targetFront did not follow rotateTo at once");
+    check(core.snapshot().frontWorkspace == 2, "the front face changed before the spring moved");
+    settle(core);
+    check(core.snapshot().frontWorkspace == 7, "rotateTo did not settle on the requested face");
+    // Shortest way round: 7 -> 2 is one step forward across the seam, not two back.
+    check(core.rotateTo(2), "rotateTo back refused");
+    check(near(core.snapshot().facePosition, -1.0) || core.snapshot().facePosition < 0, "setup");
+    settle(core);
+    check(core.snapshot().frontWorkspace == 2, "rotateTo across the seam landed elsewhere");
+    check(!core.rotateTo(99), "rotateTo accepted a workspace that is not a face");
+    core.close(true);
+    check(!core.rotateTo(11), "rotateTo worked on a closing cube");
+    Core closed;
+    closed.setWorkspaces({2, 11, 7});
+    check(!closed.rotateTo(11), "rotateTo worked on a closed cube");
+    Core single;
+    single.setWorkspaces({2});
+    single.open(2);
+    settle(single);
+    check(!single.rotateTo(2), "rotateTo accepted a one-face cube");
+}
+
 int main() {
     testVerticalTrackingAndCommit();
     testRotationAndSelection();
     testInterruptionAndCancel();
     testCloseChoosesWhereTheTurnIsGoing();
     testWorkspaceChangesAndFlatTiming();
+    testRotateToAndTargetFront();
     std::cout << "Prism core tests passed\n";
 }

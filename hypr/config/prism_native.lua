@@ -23,8 +23,9 @@
 local M = {}
 
 local home = os.getenv("HOME") or ""
-local flag = home .. "/.config/hypr/prism-native"
-local so = home .. "/.config/hypr/plugins/prism/build/prism.so"
+-- The two environment variables exist for the nested test (tests/nested.sh --autoload).
+local flag = os.getenv("PRISM_NATIVE_FLAG") or (home .. "/.config/hypr/prism-native")
+local so = os.getenv("PRISM_NATIVE_SO") or (home .. "/.config/hypr/plugins/prism/build/prism.so")
 
 local function exists(path)
     local f = io.open(path, "r")
@@ -36,26 +37,74 @@ local function plugin()
     return hl.plugin and hl.plugin.prism or nil
 end
 
--- Loads the plugin once, only when opted in. Returns true when it is usable.
-local tried = false
+-- HOW IT LOADS, and why not hl.plugin.load: measured in the nested test (tests/nested.sh
+-- --autoload), hl.plugin.load(path) called after the config has been read returns nil and
+-- loads NOTHING (the plugin list stays empty). That is what happened at login on
+-- 2026-11-24: "tried", no error, no plugin. `hyprctl plugin load` is the path that works,
+-- so it is started as a child process. Its answer goes to a file, because the only other
+-- trace used to be a notification that vanished.
+local runtime = os.getenv("XDG_RUNTIME_DIR") or "/tmp"
+local result_dir = runtime .. "/prism"
+local result_file = result_dir .. "/load-result"
+
+local function read_result()
+    local f = io.open(result_file, "r")
+    if not f then return "(no answer from hyprctl)" end
+    local text = f:read("*a") or ""
+    f:close()
+    return (text:gsub("%s+$", ""))
+end
+
+-- Starts a load when opted in and not loaded yet. The plugin appears a moment later, so
+-- the return value says only whether it is usable NOW.
 function M.load()
     if plugin() then return true end
-    if tried or not exists(flag) then return false end
-    tried = true
+    if not exists(flag) then return false end
     if not exists(so) then
         hl.notification.create({ text = "Prism native: build the plugin first (make -C hypr/plugins/prism)", timeout = 6000 })
         return false
     end
-    local ok, err = pcall(hl.plugin.load, so)
-    if not ok then
-        hl.notification.create({ text = "Prism native did not load: " .. tostring(err), timeout = 8000 })
-        return false
+    hl.dispatch(hl.dsp.exec_cmd(string.format(
+        'mkdir -p "%s" && hyprctl plugin load "%s" >"%s" 2>&1', result_dir, so, result_file)))
+    return false
+end
+
+-- Called once from the config. Loads 0.8 s after the config, checks 1.5 s later, tries
+-- again, and after the last try says why it failed instead of staying silent.
+function M.start()
+    if not exists(flag) then return end
+    local function check(try)
+        if plugin() then return end
+        if try >= 3 then
+            local why = read_result()
+            hl.notification.create({ text = "Prism native did not load: " .. why, timeout = 10000 })
+            return
+        end
+        M.load()
+        hl.timer(function() check(try + 1) end, { type = "oneshot", timeout = 1500 })
     end
-    return plugin() ~= nil
+    hl.timer(function() check(0) end, { type = "oneshot", timeout = 800 })
 end
 
 function M.enabled()
     return plugin() ~= nil
+end
+
+-- Power-aware look. "lite" (plain backdrop, small pictures) in Power Saving and in Game
+-- Mode, "full" otherwise (Balanced and Performance). Two file checks per open, no process
+-- spawned. The files are written by hypr/scripts/power/{hypr-profile,game-mode}.sh. A
+-- profile changed by anything else is not seen: that is the price of not spawning
+-- `powerprofilesctl` inside the compositor.
+local function quality()
+    if exists(runtime .. "/game-mode/active") or exists(runtime .. "/prism/power-saver") then
+        return "lite"
+    end
+    return "full"
+end
+
+local function apply_quality()
+    local p = plugin()
+    if p then p.setQuality(quality()) end
 end
 
 -- Numbered workspaces that exist, in order. Special workspaces have no number.
@@ -179,6 +228,7 @@ function M.gesture(dir)
             local cur = active_id()
             if not cur then return false end
             last_t, vy = nil, 0
+            apply_quality()
             if not (p.setWorkspaces(workspace_ids()) and p.begin(dir, cur)) then return false end
             active = true
             feed(e)
@@ -208,6 +258,7 @@ function M.toggle()
     if s.phase == "closed" then
         local cur = active_id()
         if not cur then return true end
+        apply_quality()
         p.setWorkspaces(workspace_ids())
         p.open(cur)
     else

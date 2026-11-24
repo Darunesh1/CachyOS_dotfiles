@@ -16,7 +16,11 @@ namespace prism {
 // Draws windows and their subsurfaces into a bounded compositor-owned GPU
 // texture. Call once per invalid preview on the compositor thread, outside an
 // active render context. The caller controls the cache lifetime.
-[[nodiscard]] std::optional<FaceTexture> captureWorkspace(PHLWORKSPACE workspace);
+// `scale` is the fraction of the monitor's size (capped at 1600 on the long side). With a
+// transparent background the picture holds only the windows, so the wallpaper can be
+// drawn behind it (full quality); otherwise it is filled with a dark colour (lite).
+[[nodiscard]] std::optional<FaceTexture> captureWorkspace(PHLWORKSPACE workspace, double scale = 0.4,
+                                                          bool transparentBackground = false);
 
 [[nodiscard]] PHLWORKSPACE findWorkspace(WorkspaceId id);
 
@@ -37,6 +41,9 @@ class ContentCache {
 public:
     static constexpr std::chrono::milliseconds maxAge{2000};
 
+    // How new pictures are made. A change of either drops every picture: they were made
+    // for the old setting.
+    void configure(double scale, bool transparentBackground) noexcept;
     void invalidateAll() noexcept;
     void refresh(std::span<const WorkspaceId> workspaces, std::optional<WorkspaceId> forced);
     // Forget faces whose workspace is not listed: they hold GPU memory for nothing.
@@ -54,6 +61,8 @@ private:
 
     void drop(WorkspaceId id) noexcept;
 
+    double scale_ = 0.4;
+    bool transparent_ = false;
     std::vector<FaceTexture> faces_;
     std::unordered_map<WorkspaceId, Meta> meta_;
     ContentStats stats_;
