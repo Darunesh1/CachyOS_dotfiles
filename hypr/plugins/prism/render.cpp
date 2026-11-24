@@ -27,6 +27,14 @@ struct DrawLabel {
     float alpha;
 };
 
+// The window being dragged: its picture (a crop of the source workspace's), outline, shadow.
+struct DrawGhost {
+    SP<Render::ITexture> texture;
+    std::vector<SMeshRenderVertex> vertices;
+    std::vector<SMeshRenderVertex> edge;
+    std::vector<SMeshRenderVertex> shadow;
+};
+
 struct DrawFace {
     SP<Render::ITexture> texture;
     std::vector<SMeshRenderVertex> vertices;
@@ -34,6 +42,7 @@ struct DrawFace {
     std::vector<SMeshRenderVertex> shadow[3];    // three growing, faint rings: a soft shadow
     std::vector<SMeshRenderVertex> edge;         // a thin outline
     bool current = false;                        // the workspace you are on: accent outline
+    bool hover = false;                          // a dragged window is over it: thick accent outline
     std::optional<DrawLabel> label;
 };
 
@@ -132,9 +141,10 @@ std::vector<SMeshRenderVertex> mesh(const ProjectedFace& face, const Cover& cove
 class FacePass final : public IPassElement {
 public:
     FacePass(std::vector<DrawFace> faces, double openness, SP<Render::ITexture> wallpaper, Cover cover,
-             SP<Render::ITexture> accent, SP<Render::ITexture> soft, SP<Render::ITexture> shade)
+             SP<Render::ITexture> accent, SP<Render::ITexture> soft, SP<Render::ITexture> shade,
+             std::optional<DrawGhost> ghost)
         : faces_(std::move(faces)), openness_(openness), wallpaper_(std::move(wallpaper)), cover_(cover),
-          accent_(std::move(accent)), soft_(std::move(soft)), shade_(std::move(shade)) {}
+          accent_(std::move(accent)), soft_(std::move(soft)), shade_(std::move(shade)), ghost_(std::move(ghost)) {}
 
     const char* passName() override { return prism::passName; }
     ePassElementType type() override { return EK_CUSTOM; }
@@ -191,13 +201,23 @@ public:
                                       {.damage = &ctx.m_data.damage, .allowDim = false});
             gl->renderTextureMesh(ctx, face.texture, output, face.vertices,
                                   {.damage = &ctx.m_data.damage, .allowDim = false});
-            const auto& line = face.current ? accent_ : soft_;
+            const auto& line = face.current || face.hover ? accent_ : soft_;
             if (line && line->ok() && !face.edge.empty())
                 gl->renderTextureMesh(ctx, line, output, face.edge,
                                       {.damage = &ctx.m_data.damage, .a = a, .allowDim = false});
             if (face.label && face.label->texture && face.label->texture->ok())
                 gl->renderTexture(ctx, face.label->texture, face.label->box,
                                   {.damage = &ctx.m_data.damage, .a = face.label->alpha * a, .allowDim = false});
+        }
+        if (ghost_ && ghost_->texture && ghost_->texture->ok()) {
+            if (shade_ && shade_->ok() && !ghost_->shadow.empty())
+                gl->renderTextureMesh(ctx, shade_, output, ghost_->shadow,
+                                      {.damage = &ctx.m_data.damage, .a = a, .allowDim = false});
+            gl->renderTextureMesh(ctx, ghost_->texture, output, ghost_->vertices,
+                                  {.damage = &ctx.m_data.damage, .a = 0.92F * a, .allowDim = false});
+            if (accent_ && accent_->ok() && !ghost_->edge.empty())
+                gl->renderTextureMesh(ctx, accent_, output, ghost_->edge,
+                                      {.damage = &ctx.m_data.damage, .a = a, .allowDim = false});
         }
         gl->disableScissor();
         gl->blend(previousBlend);
@@ -210,6 +230,7 @@ private:
     SP<Render::ITexture> wallpaper_;
     Cover cover_;
     SP<Render::ITexture> accent_, soft_, shade_;
+    std::optional<DrawGhost> ghost_;
 };
 
 } // namespace
@@ -221,7 +242,8 @@ RenderDiagnostics renderDiagnostics() noexcept {
 }
 
 void FaceRenderer::enqueue(Render::CRenderContext& ctx, const Snapshot& state,
-                           std::span<const WorkspaceId> workspaces, std::span<const FaceTexture> textures) {
+                           std::span<const WorkspaceId> workspaces, std::span<const FaceTexture> textures,
+                           const DragView* drag) {
     ++attempts;
     if (state.phase == Phase::Closed || state.openness <= 0 || !ctx.m_data.pMonitor ||
         ctx.m_renderingCapture || ctx.m_renderingSnapshot || ctx.m_mode != Render::RENDER_MODE_NORMAL ||
@@ -247,7 +269,8 @@ void FaceRenderer::enqueue(Render::CRenderContext& ctx, const Snapshot& state,
     const double frontPixels = 0.62 * outW;
 
     std::vector<DrawFace> faces;
-    for (const auto& face : projectFaces(workspaces, state.facePosition, state.openness)) {
+    const auto projected = projectFaces(workspaces, state.facePosition, state.openness, state.flatness);
+    for (const auto& face : projected) {
         ++candidates;
         const auto it = std::ranges::find(textures, face.workspace, &FaceTexture::workspace);
         auto tex = it != textures.end() ? it->texture : nullptr;
@@ -269,7 +292,8 @@ void FaceRenderer::enqueue(Render::CRenderContext& ctx, const Snapshot& state,
                 draw.shadow[1] = grown(face, 16, outW, outH);
                 draw.shadow[2] = grown(face, 7, outW, outH);
             }
-            draw.edge = outline(face, 2.0, 1.0, outW, outH);
+            draw.hover = drag && drag->hover && *drag->hover == face.workspace;
+            draw.edge = outline(face, draw.hover ? 5.0 : 2.0, 1.0, outW, outH);
             draw.current = state.originWorkspace && *state.originWorkspace == face.workspace;
             if (const auto label = labels_.find(face.workspace); label != labels_.end() && label->second.texture) {
                 const auto left = face.point(0, 1), right = face.point(1, 1);
@@ -284,12 +308,44 @@ void FaceRenderer::enqueue(Render::CRenderContext& ctx, const Snapshot& state,
             faces.push_back(std::move(draw));
         }
     }
+    // The dragged window follows the cursor, drawn at the size it has in the row.
+    std::optional<DrawGhost> ghost;
+    if (drag && !projected.empty()) {
+        const auto source = std::ranges::find(textures, drag->source, &FaceTexture::workspace);
+        const auto shown = std::ranges::find(projected, drag->source, &ProjectedFace::workspace);
+        const auto& reference = shown != projected.end() ? *shown : projected.back();
+        const double faceW = reference.point(1, 0).x - reference.point(0, 0).x;
+        const double faceH = reference.point(0, 1).y - reference.point(0, 0).y;
+        if (source != textures.end() && source->texture && source->texture->ok() && faceW > 0 && faceH > 0) {
+            const double w = drag->window.w * faceW * 0.85, h = drag->window.h * faceH * 0.85;
+            const double x0 = drag->x - w / 2, y0 = drag->y - h / 2;
+            const float u0 = static_cast<float>(drag->window.x), v0 = static_cast<float>(drag->window.y);
+            const float u1 = static_cast<float>(drag->window.x + drag->window.w);
+            const float v1 = static_cast<float>(drag->window.y + drag->window.h);
+            const auto put = [](double x, double y, float u, float v) {
+                return SMeshRenderVertex{static_cast<float>(x), static_cast<float>(y), u, v};
+            };
+            DrawGhost g;
+            g.texture = source->texture;
+            g.vertices = {put(x0, y0, u0, v0),     put(x0, y0 + h, u0, v1), put(x0 + w, y0, u1, v0),
+                          put(x0 + w, y0, u1, v0), put(x0, y0 + h, u0, v1), put(x0 + w, y0 + h, u1, v1)};
+            const ProjectedPoint corner[4] = {{x0, y0}, {x0 + w, y0}, {x0 + w, y0 + h}, {x0, y0 + h}};
+            for (int i = 0; i < 4; ++i)
+                ribbon(g.edge, corner[i], corner[(i + 1) % 4], 3.0, outW, outH);
+            const double grow = 14.0;
+            const double gx = grow / outW, gy = grow / outH;
+            g.shadow = {put(x0 - gx, y0 - gy, 0.5F, 0.5F),     put(x0 - gx, y0 + h + gy, 0.5F, 0.5F),
+                        put(x0 + w + gx, y0 - gy, 0.5F, 0.5F), put(x0 + w + gx, y0 - gy, 0.5F, 0.5F),
+                        put(x0 - gx, y0 + h + gy, 0.5F, 0.5F), put(x0 + w + gx, y0 + h + gy, 0.5F, 0.5F)};
+            ghost = std::move(g);
+        }
+    }
     if (!faces.empty())
         ++enqueues;
     if (!faces.empty())
         Render::IHyprRenderer::addPassElement(
             ctx, makeUnique<FacePass>(std::move(faces), state.openness, wallpaper_, cover, accentEdge_, softEdge_,
-                                      shade_));
+                                      shade_, std::move(ghost)));
 }
 
 void FaceRenderer::reset() {

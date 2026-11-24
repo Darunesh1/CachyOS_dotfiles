@@ -112,12 +112,109 @@ void testScroll() {
     check(!std::isnan(0.0) && router.scroll(core, std::nan(""), true, 3000), "a non-finite scroll must be swallowed");
 }
 
+// Each workspace holds one window that covers the middle 80 % of its picture; its id is 100 + the workspace.
+std::optional<prism::WindowRect> oneWindow(prism::WorkspaceId workspace, double u, double v) {
+    if (u < 0.1 || u > 0.9 || v < 0.1 || v > 0.9)
+        return std::nullopt;
+    return prism::WindowRect{static_cast<std::uint64_t>(100 + workspace), 0.1, 0.1, 0.8, 0.8};
+}
+
+// The centre of workspace `id` in the unfolded row, as output fractions.
+prism::ProjectedPoint rowCentre(const Core& core, prism::WorkspaceId id) {
+    const auto s = core.snapshot();
+    for (const auto& f : prism::projectFaces(core.workspaces(), s.facePosition, s.openness, s.flatness))
+        if (f.workspace == id)
+            return f.point(0.5, 0.5);
+    check(false, "workspace missing from the flat row");
+    return {};
+}
+
+void testDragMovesAWindow() {
+    PointerRouter router;
+    router.setWindowFinder(oneWindow);
+    auto core = openCube({1, 2, 3}, 1);
+
+    check(router.press(core, 0.5, 0.5), "press on the window");
+    check(!router.move(core, 0.505, 0.5), "a tiny wobble must not start a drag");
+    check(!router.dragging(), "dragging started inside the slop");
+    check(router.move(core, 0.55, 0.5) && router.dragging(), "moving past the slop did not start a drag");
+    settle(core);
+    check(core.snapshot().flatness == 1, "the cube did not unfold for the drag");
+    check(core.targetFront() == 1, "unfolding changed the front face");
+
+    const auto target = rowCentre(core, 3);
+    check(router.move(core, target.x, target.y), "moving while dragging did not ask for a frame");
+    const auto view = router.dragView();
+    check(view && view->source == 1 && view->window.id == 101 && view->hover == 3, "the drag view does not name the source window and hovered workspace");
+    check(router.release(core, target.x, target.y), "the release of a drag was not owned");
+    const auto drop = router.takeDrop();
+    check(drop && drop->window == 101 && drop->workspace == 3, "dropping on workspace 3 did not produce a move of window 101");
+    check(!router.takeDrop(), "a drop was delivered twice");
+    check(!router.dragging() && !router.dragView(), "the drag did not end");
+    settle(core);
+    check(core.snapshot().flatness == 0 && core.snapshot().phase == Phase::Open, "the cube did not fold back and stay open");
+    check(core.targetFront() == 1, "a drop changed the workspace you are on");
+}
+
+void testDragCancels() {
+    PointerRouter router;
+    router.setWindowFinder(oneWindow);
+    auto core = openCube({1, 2, 3}, 1);
+
+    // Dropped on its own workspace: nothing to move.
+    router.press(core, 0.5, 0.5);
+    router.move(core, 0.55, 0.5);
+    settle(core);
+    const auto home = rowCentre(core, 1);
+    router.move(core, home.x, home.y);
+    check(router.release(core, home.x, home.y) && !router.takeDrop(), "dropping on the source workspace moved a window");
+
+    // Dropped on the backdrop: nothing to move.
+    router.press(core, 0.5, 0.5);
+    router.move(core, 0.55, 0.5);
+    settle(core);
+    check(router.release(core, 0.01, 0.01) && !router.takeDrop(), "dropping on the backdrop moved a window");
+
+    // Escape while dragging.
+    settle(core);
+    router.press(core, 0.5, 0.5);
+    router.move(core, 0.55, 0.5);
+    check(router.dragging(), "setup: dragging");
+    check(router.cancelDrag(core) && !router.dragging(), "cancelDrag did not stop the drag");
+    check(!router.cancelDrag(core), "cancelDrag with nothing to cancel claimed to cancel");
+    settle(core);
+    check(core.snapshot().flatness == 0, "cancel did not fold the cube");
+    check(router.release(core, 0.55, 0.5) && !router.takeDrop(), "the release after a cancel produced a move");
+
+    // The cube closes mid-drag (a key): the drag is dropped, nothing moves.
+    router.press(core, 0.5, 0.5);
+    router.move(core, 0.55, 0.5);
+    core.close(false);
+    router.move(core, 0.6, 0.5);
+    check(!router.dragging(), "a drag survived the cube closing");
+    check(router.release(core, 0.6, 0.5) && !router.takeDrop(), "closing mid-drag still moved a window");
+    settle(core);
+
+    // A press on empty space never becomes a drag, and a drag turns nothing by scrolling.
+    core = openCube({1, 2, 3}, 1);
+    router.press(core, 0.5, 0.05);
+    check(!router.move(core, 0.6, 0.05) && !router.dragging(), "a press on empty space started a drag");
+    router.release(core, 0.6, 0.05);
+    router.press(core, 0.5, 0.5);
+    router.move(core, 0.56, 0.5);
+    check(router.scroll(core, 30, true, 5000) && core.targetFront() == 1, "scrolling while dragging turned the row");
+    router.cancelDrag(core);
+    router.release(core, 0.56, 0.5);
+}
+
 } // namespace
 
 int main() {
+    testDragMovesAWindow();
+    testDragCancels();
     testClicks();
     testBackdropAndSlop();
     testNotOwnedWhenNotOpen();
     testScroll();
-    std::cout << "pointer: side face, front face, backdrop, drag is not a click, not open, scroll passed\n";
+    std::cout << "pointer: side face, front face, backdrop, drag is not a click, not open, scroll, window drag and cancel passed\n";
 }

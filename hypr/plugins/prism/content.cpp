@@ -133,10 +133,22 @@ std::optional<FaceTexture> captureWorkspace(PHLWORKSPACE workspace, double scale
         CClearPassElement::SClearData{transparentBackground ? CHyprColor(0.0, 0.0, 0.0, 0.0)
                                                             : CHyprColor(0.12, 0.15, 0.20, 1.0)},
         damage);
+    // Windows are also recorded, bottom to top as drawn, so the overview can pick one to drag.
+    // Positions are fractions of the monitor, which is what the picture covers.
+    std::vector<WindowRect> rects;
+    const auto monitorSize = monitor->m_size;
     for (const bool floating : {false, true}) {
         for (const auto& window : windows) {
-            if (belongs(window) && window->isFloating() == floating)
+            if (belongs(window) && window->isFloating() == floating) {
                 drawWindow(ctx, window, monitor);
+                if (monitorSize.x >= 1 && monitorSize.y >= 1) {
+                    const auto geom = window->geometricBox(Desktop::View::IGeometric::GEOMETRIC_CURRENT);
+                    rects.push_back({static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(window.get())),
+                                     (geom.x - monitor->m_position.x) / monitorSize.x,
+                                     (geom.y - monitor->m_position.y) / monitorSize.y, geom.width / monitorSize.x,
+                                     geom.height / monitorSize.y});
+                }
+            }
         }
     }
     finished = true;
@@ -144,8 +156,8 @@ std::optional<FaceTexture> captureWorkspace(PHLWORKSPACE workspace, double scale
     auto texture = framebuffer->getTexture();
     if (!texture || !texture->ok())
         return std::nullopt;
-    return FaceTexture{static_cast<WorkspaceId>(*workspace->numberedID()), std::move(texture), std::string{},
-                       windowCount};
+    return FaceTexture{static_cast<WorkspaceId>(*workspace->numberedID()), std::move(texture), std::move(rects),
+                       std::string{}, windowCount};
 }
 
 void ContentCache::configure(double scale, bool transparentBackground) noexcept {

@@ -92,5 +92,25 @@ int main() {
     }
     check(prism::openFaceFraction(2) > prism::openFaceFraction(6), "fewer workspaces must give bigger faces");
 
+    // The flat row (used while dragging a window): every workspace is visible, in order, inside
+    // the screen, without overlapping, whatever the count. Eight workspaces is the largest case.
+    for (std::size_t n = 1; n <= 8; ++n) {
+        std::vector<prism::WorkspaceId> many(n);
+        for (std::size_t i = 0; i < n; ++i)
+            many[i] = static_cast<prism::WorkspaceId>(i + 1);
+        const double middle = n > 1 ? static_cast<double>(n - 1) / 2 : 0.0; // centre the row on its middle
+        auto row = projectFaces(many, middle, 1, 1);
+        check(row.size() == n, "the flat row must show every workspace exactly once");
+        std::ranges::sort(row, {}, [](const prism::ProjectedFace& f) { return f.point(0, 0).x; });
+        for (std::size_t i = 0; i < row.size(); ++i) {
+            const auto l = row[i].point(0, 0), r = row[i].point(1, 1);
+            check(l.x >= 0.0 && r.x <= 1.0, "a face of the flat row leaves the screen");
+            if (i > 0)
+                check(row[i - 1].point(1, 0).x <= l.x + 1e-9, "faces of the flat row overlap");
+        }
+        // Folded back (flatness 0) is the plain cube again.
+        check(projectFaces(many, 0, 1, 0).size() == projectFaces(many, 0, 1).size(), "default flatness changed");
+    }
+
     std::cout << "projection: identity, size, backface culling, painter order, perspective, wrapping, 1–6 faces passed\n";
 }

@@ -15,6 +15,7 @@ struct Snapshot {
     Phase phase;
     double openness;
     double facePosition;
+    double flatness; // 0: the cube, 1: a flat row of every workspace (used while dragging a window)
     std::optional<WorkspaceId> frontWorkspace;
     std::optional<WorkspaceId> originWorkspace;
     bool animating;
@@ -37,6 +38,9 @@ public:
     // Turn the cube so that `workspace` is the front face, by the shortest way round.
     // False when the cube is not open or the workspace is not a face.
     bool rotateTo(WorkspaceId workspace);
+    // Unfold the cube into a flat row so every workspace is a drop target, or fold it back.
+    // Only does anything while the cube is open.
+    void setFlat(bool flat);
     void reset();
 
     void tick(double dtSeconds);
@@ -74,6 +78,9 @@ private:
     double facePosition_ = 0;
     double targetFacePosition_ = 0;
     double faceVelocity_ = 0;
+    bool targetFlat_ = false;
+    double flatness_ = 0;
+    double flatVelocity_ = 0;
 };
 
 } // namespace prism

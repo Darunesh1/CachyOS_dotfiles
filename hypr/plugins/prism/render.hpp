@@ -71,25 +71,38 @@ struct ProjectedFace {
 
 // Keep projection independent of compositor objects so geometry can be replayed
 // without a GL context. Results are sorted back to front for painter's order.
+//
+// `flatness` 0 is the cube; 1 is a flat row of every workspace, small enough to fit the
+// screen, used while a window is dragged so each workspace is a drop target.
 inline std::vector<ProjectedFace> projectFaces(std::span<const WorkspaceId> workspaces,
-                                               double position, double openness) {
+                                               double position, double openness, double flatness = 0) {
     std::vector<ProjectedFace> visible;
-    if (workspaces.empty() || !std::isfinite(position) || !std::isfinite(openness))
+    if (workspaces.empty() || !std::isfinite(position) || !std::isfinite(openness) || !std::isfinite(flatness))
         return visible;
 
     openness = std::clamp(openness, 0.0, 1.0);
-    const double size = 1 - (1 - openFaceFraction(workspaces.size())) * openness;
-    const double pitch = size + 0.008 * openness;
+    flatness = std::clamp(flatness, 0.0, 1.0);
     const auto count = workspaces.size();
+    const double openSize = openFaceFraction(count);
+    // Every face on screen at once: n faces and their n - 1 gaps (0.028 each, see `pitch`)
+    // fit in 92 % of the width.
+    const double flatSize = std::clamp(
+        (0.92 - 0.028 * static_cast<double>(count - 1)) / static_cast<double>(count), 0.05, openSize);
+    const double faceSize = openSize + (flatSize - openSize) * flatness;
+    const double size = 1 - (1 - faceSize) * openness;
+    const double pitch = size + (0.008 + 0.02 * flatness) * openness;
     // Two opposite planes disappear edge-on halfway through a turn. Put each
     // workspace on a pair of opposite faces of a four-sided drum instead.
-    const auto sides = count == 2 ? 4UL : count;
+    const auto sides = count == 2 && flatness == 0 ? 4UL : count;
     const double fullStep = 2 * std::numbers::pi / std::max<std::size_t>(3, sides);
-    const double step = fullStep * openness;
+    const double step = fullStep * openness * (1 - flatness);
     const double camera = std::max(1.5 * pitch, 3.2 * pitch / (2 * std::tan(fullStep / 2)));
 
     for (std::size_t i = 0; i < sides; ++i) {
-        const double offset = std::remainder(i - position, static_cast<double>(sides));
+        // A flat row has no duplicate faces; the two-workspace drum has two of each.
+        if (flatness > 0 && i >= count)
+            continue;
+        const double offset = std::remainder(static_cast<double>(i) - position, static_cast<double>(sides));
         const double angle = offset * step;
         const double cosine = std::cos(angle);
         const double sine = std::sin(angle);
@@ -111,9 +124,26 @@ inline std::vector<ProjectedFace> projectFaces(std::span<const WorkspaceId> work
     return visible;
 }
 
+// A window's place in its workspace picture, as fractions of the picture (0 to 1 each way), and
+// an id that is the compositor's window address.
+struct WindowRect {
+    std::uint64_t id = 0;
+    double x = 0, y = 0, w = 0, h = 0;
+};
+
+// A window being dragged, for the renderer: where it came from, where the cursor is (output
+// fractions), and which other workspace is under it.
+struct DragView {
+    WorkspaceId source = 0;
+    WindowRect window;
+    double x = 0, y = 0;
+    std::optional<WorkspaceId> hover;
+};
+
 struct FaceTexture {
     WorkspaceId workspace;
     Hyprutils::Memory::CSharedPointer<Render::ITexture> texture;
+    std::vector<WindowRect> windowRects; // bottom to top, for picking a window to drag
     std::string name;  // reserved for a workspace name (Hyprland keeps it private); the number is shown
     int windows = 0;   // how many windows it holds, for its label
 };
@@ -124,7 +154,8 @@ public:
     // textures. The pass takes a strong ref to each visible texture. Client
     // surface buffers require compositor synchronization before becoming previews.
     void enqueue(Render::CRenderContext& ctx, const Snapshot& state,
-                 std::span<const WorkspaceId> workspaces, std::span<const FaceTexture> textures = {});
+                 std::span<const WorkspaceId> workspaces, std::span<const FaceTexture> textures = {},
+                 const DragView* drag = nullptr);
     void reset();
 
     void setQuality(Quality quality);

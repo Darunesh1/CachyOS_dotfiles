@@ -72,6 +72,7 @@ prism::PointerRouter pointerRouter;
 // thinking the button is still down.
 std::set<std::uint32_t> swallowedButtons;
 std::uint64_t clicksOwned = 0;
+std::optional<prism::Drop> pendingDrop; // a window dropped on a workspace, until Lua moves it
 std::uint32_t lastSwipeMs = 0;
 std::uint64_t swipesOwned = 0;
 CHyprSignalListener renderListener;
@@ -109,6 +110,7 @@ void resetAll() noexcept {
         swipeRouter.reset();
         pointerRouter.reset();
         swallowedButtons.clear();
+        pendingDrop.reset();
         content.clear();
         lastFrame = {};
     } catch (...) {
@@ -192,6 +194,29 @@ bool sessionLocked() noexcept {
 // or nothing per click, nothing throws into the compositor, the cursor still moves.
 void installPointer() {
     auto& mouse = Event::bus()->m_events.input.mouse;
+    // Which window is under a point of a workspace's picture: the topmost one that holds it.
+    pointerRouter.setWindowFinder([](prism::WorkspaceId workspace, double u, double v) -> std::optional<prism::WindowRect> {
+        const auto faces = content.textures();
+        const auto face = std::ranges::find(faces, workspace, &prism::FaceTexture::workspace);
+        if (face == faces.end())
+            return std::nullopt;
+        for (auto it = face->windowRects.rbegin(); it != face->windowRects.rend(); ++it)
+            if (u >= it->x && u <= it->x + it->w && v >= it->y && v <= it->y + it->h)
+                return *it;
+        return std::nullopt;
+    });
+    // The cursor keeps moving (this event is never cancelled); a drag only needs to follow it.
+    pointerListeners.push_back(mouse.move.listen([](Vector2D, Event::SCallbackInfo&) {
+        try {
+            if (!pointerRouter.pressedNow())
+                return;
+            double x = 0, y = 0;
+            if (cursorOnOutput(x, y) && pointerRouter.move(core, x, y))
+                requestFrame();
+        } catch (...) {
+            pointerRouter.reset();
+        }
+    }));
     pointerListeners.push_back(mouse.button.listen([](IPointer::SButtonEvent e, Event::SCallbackInfo& info) {
         try {
             if (e.state == WL_POINTER_BUTTON_STATE_PRESSED) {
@@ -215,6 +240,8 @@ void installPointer() {
                 const bool known = cursorOnOutput(x, y);
                 if (known && pointerRouter.release(core, x, y)) {
                     ++clicksOwned;
+                    if (const auto drop = pointerRouter.takeDrop())
+                        pendingDrop = drop;
                     lastFrame = {};
                     requestFrame();
                 } else {
@@ -314,7 +341,8 @@ void onRenderStage(const Event::SRenderStageEvent& event) {
         }
         lastFrame = now;
         const auto state = core.snapshot();
-        renderer.enqueue(event.context->get(), state, core.workspaces(), content.textures());
+        const auto drag = pointerRouter.dragView();
+        renderer.enqueue(event.context->get(), state, core.workspaces(), content.textures(), drag ? &*drag : nullptr);
         if (state.animating && event.monitor && g_pHyprRenderer)
             g_pHyprRenderer->damageMonitor(event.monitor);
         const auto ns = frameTimer.ns();
@@ -438,6 +466,11 @@ int open(lua_State* state) noexcept {
 int close(lua_State* state) noexcept {
     if (!lua_isboolean(state, 1))
         return pushResult(state, false);
+    // Escape while dragging a window puts the window back; it does not also close the cube.
+    if (pointerRouter.cancelDrag(core)) {
+        requestFrame();
+        return pushResult(state, true);
+    }
     const auto accepted = core.close(lua_toboolean(state, 1) != 0);
     if (accepted)
         requestFrame();
@@ -513,6 +546,8 @@ int snapshot(lua_State* state) noexcept {
     lua_setfield(state, -2, "openness");
     lua_pushnumber(state, current.facePosition);
     lua_setfield(state, -2, "facePosition");
+    lua_pushnumber(state, current.flatness);
+    lua_setfield(state, -2, "flatness");
     pushWorkspace(state, current.frontWorkspace);
     lua_setfield(state, -2, "frontWorkspace");
     pushWorkspace(state, current.originWorkspace);
@@ -618,11 +653,102 @@ int pointerScroll(lua_State* state) noexcept {
     }
 }
 
+// The window dropped on a workspace, once: { window = "0x...", workspace = N }, or nil. Lua moves
+// it (hl.dsp.window.move), so the compositor's own dispatcher does the work.
+int takeDrop(lua_State* state) noexcept {
+    if (!pendingDrop) {
+        lua_pushnil(state);
+        return 1;
+    }
+    const auto drop = *pendingDrop;
+    pendingDrop.reset();
+    lua_createtable(state, 0, 2);
+    char address[32];
+    std::snprintf(address, sizeof address, "0x%llx", static_cast<unsigned long long>(drop.window));
+    lua_pushstring(state, address);
+    lua_setfield(state, -2, "window");
+    lua_pushinteger(state, static_cast<lua_Integer>(drop.workspace));
+    lua_setfield(state, -2, "workspace");
+    return 1;
+}
+
+// Re-captures what changed while the cube is open (after a window was moved).
+int refresh(lua_State* state) noexcept {
+    try {
+        const auto snapshot = core.snapshot();
+        if (snapshot.phase == prism::Phase::Closed)
+            return pushResult(state, false);
+        const Stopwatch timer;
+        content.refresh(core.workspaces(), std::nullopt);
+        noteCapture(timer.ns());
+        if (snapshot.originWorkspace)
+            prepareLabels(*snapshot.originWorkspace);
+        requestFrame();
+        return pushResult(state, true);
+    } catch (...) {
+        content.clear();
+        return pushResult(state, false);
+    }
+}
+
+// Test hook: where workspace N's face is centred right now (output fractions), or nil when it is
+// not on screen. Lets the nested test aim a drop at a workspace without redoing the projection.
+int faceCentre(lua_State* state) noexcept {
+    if (!lua_isinteger(state, 1)) {
+        lua_pushnil(state);
+        return 1;
+    }
+    const auto id = lua_tointeger(state, 1);
+    const auto snapshot = core.snapshot();
+    for (const auto& face : prism::projectFaces(core.workspaces(), snapshot.facePosition, snapshot.openness, snapshot.flatness)) {
+        if (face.workspace == id) {
+            const auto p = face.point(0.5, 0.5);
+            lua_createtable(state, 0, 2);
+            lua_pushnumber(state, p.x);
+            lua_setfield(state, -2, "x");
+            lua_pushnumber(state, p.y);
+            lua_setfield(state, -2, "y");
+            return 1;
+        }
+    }
+    lua_pushnil(state);
+    return 1;
+}
+
+// Test hooks, like pointerClick: the three halves of a drag.
+int pointerPress(lua_State* state) noexcept {
+    double x, y;
+    if (!readFiniteNumber(state, 1, x) || !readFiniteNumber(state, 2, y))
+        return pushResult(state, false);
+    return pushResult(state, pointerRouter.press(core, x, y));
+}
+
+int pointerMove(lua_State* state) noexcept {
+    double x, y;
+    if (!readFiniteNumber(state, 1, x) || !readFiniteNumber(state, 2, y))
+        return pushResult(state, false);
+    const bool dragging = pointerRouter.move(core, x, y);
+    requestFrame();
+    return pushResult(state, dragging);
+}
+
+int pointerRelease(lua_State* state) noexcept {
+    double x, y;
+    if (!readFiniteNumber(state, 1, x) || !readFiniteNumber(state, 2, y))
+        return pushResult(state, false);
+    const bool owned = pointerRouter.release(core, x, y);
+    if (const auto drop = pointerRouter.takeDrop())
+        pendingDrop = drop;
+    requestFrame();
+    return pushResult(state, owned);
+}
+
 int reset(lua_State* state) noexcept {
     core.reset();
     swipeRouter.reset();
     pointerRouter.reset();
     swallowedButtons.clear();
+    pendingDrop.reset();
     lastFrame = {};
     requestFrame();
     return pushResult(state, true);
@@ -652,6 +778,12 @@ constexpr std::array luaBindings{
     LuaBinding{"renderDiagnostics", renderDiagnostics},
     LuaBinding{"setQuality", setQuality},
     LuaBinding{"pointerClick", pointerClick},
+    LuaBinding{"pointerPress", pointerPress},
+    LuaBinding{"pointerMove", pointerMove},
+    LuaBinding{"pointerRelease", pointerRelease},
+    LuaBinding{"takeDrop", takeDrop},
+    LuaBinding{"faceCentre", faceCentre},
+    LuaBinding{"refresh", refresh},
     LuaBinding{"pointerScroll", pointerScroll},
     LuaBinding{"reset", reset},
     LuaBinding{"takeSelection", takeSelection},

@@ -221,7 +221,31 @@ void testRotateToAndTargetFront() {
     check(!single.rotateTo(2), "rotateTo accepted a one-face cube");
 }
 
+void testFlatRowForDragging() {
+    auto core = openOverview();
+    check(core.snapshot().flatness == 0, "an open cube must start folded");
+    core.setFlat(true);
+    check(core.snapshot().animating, "unfolding did not animate");
+    settle(core);
+    check(core.snapshot().flatness == 1 && core.snapshot().phase == Phase::Open, "the cube did not unfold completely");
+    check(core.targetFront() == 2 && core.snapshot().openness == 1, "unfolding changed the face or openness");
+    core.setFlat(false);
+    settle(core);
+    check(core.snapshot().flatness == 0, "the cube did not fold back");
+    core.setFlat(true);
+    settle(core);
+    core.close(true); // closing while unfolded must fold it back by itself
+    settle(core);
+    check(core.snapshot().phase == Phase::Closed && core.snapshot().flatness == 0, "closing left the cube unfolded");
+    Core closed;
+    closed.setWorkspaces({2, 11, 7});
+    closed.setFlat(true);
+    settle(closed);
+    check(closed.snapshot().flatness == 0, "a closed cube unfolded");
+}
+
 int main() {
+    testFlatRowForDragging();
     testVerticalTrackingAndCommit();
     testRotationAndSelection();
     testInterruptionAndCancel();

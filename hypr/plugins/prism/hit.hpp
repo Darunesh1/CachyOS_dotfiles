@@ -44,8 +44,8 @@ struct Hit {
 // The face under a point, nearest to the viewer first (the faces are drawn back to front, so
 // the last one drawn is on top). Nothing means the backdrop.
 [[nodiscard]] inline std::optional<Hit> hitTest(std::span<const WorkspaceId> workspaces, double position,
-                                                 double openness, double x, double y) {
-    const auto faces = projectFaces(workspaces, position, openness);
+                                                 double openness, double x, double y, double flatness = 0) {
+    const auto faces = projectFaces(workspaces, position, openness, flatness);
     for (auto it = faces.rbegin(); it != faces.rend(); ++it) {
         if (const auto uv = faceUV(*it, x, y))
             return Hit{it->workspace, *uv, it == faces.rbegin()};

@@ -188,6 +188,18 @@ local function watch()
             return
         end
         if s.phase == "open" then enter_keys() end
+        -- A window dropped on another workspace in the overview. Moved silently (follow = false):
+        -- without it Hyprland also switches to the destination, which would land you somewhere
+        -- you did not ask to go (the same call the Quickshell version used, measured there).
+        local drop = p.takeDrop()
+        if drop then
+            hl.dispatch(hl.dsp.window.move({ workspace = drop.workspace, follow = false, window = "address:" .. drop.window }))
+            -- The faces show pictures from before the move: re-capture once it has happened.
+            hl.timer(function()
+                local q = plugin()
+                if q then q.refresh() end
+            end, { type = "oneshot", timeout = 250 })
+        end
         if s.phase ~= last_phase then last_phase, since = s.phase, 0 end
         local delay = s.animating and 30 or 100
         since = since + delay

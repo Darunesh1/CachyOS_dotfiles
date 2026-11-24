@@ -6,7 +6,7 @@ usage() {
 Usage: nested.sh --check
        nested.sh --lifecycle [--cycles COUNT] [PLUGIN]
        nested.sh --gesture [PLUGIN]
-       nested.sh --screenshot OUTPUT [--windows] [PLUGIN]
+       nested.sh --screenshot OUTPUT [--windows [--drag]] [PLUGIN]
        nested.sh --driver [PLUGIN]
        nested.sh --safety [PLUGIN]
        nested.sh --stress [PLUGIN]
@@ -223,7 +223,19 @@ end
 local state = prism.snapshot()
 assert(state.openness == 1 and not state.animating, "Prism did not finish opening")
 assert(state.frontWorkspace == $front, "workspace $front is not in front")
-if $turn then
+if ${PRISM_TEST_DRAG-0} == 1 then
+    -- Mid-drag: pick up the front window and hold it over workspace 1 in the unfolded row.
+    assert(prism.pointerPress(0.5, 0.5))
+    assert(prism.pointerMove(0.56, 0.5))
+    for _ = 1, 120 do
+        if not prism.snapshot().animating then
+            break
+        end
+        assert(prism.tick(1 / 120))
+    end
+    local target = assert(prism.faceCentre(1), "workspace 1 is not in the row")
+    prism.pointerMove(target.x, target.y)
+elseif $turn then
     -- Hold a sideways swipe half way, so the neighbouring faces are on screen.
     assert(prism.begin("horizontal", $front))
     assert(prism.update(110, 0, 0.1))
@@ -261,6 +273,11 @@ wait_phase() {
 test_driver() {
     local out
     open_test_windows
+    # The active workspace can still read as 1 for a moment after the last test window opens
+    # (measured: the swipe-up test below saw origin 1 in about half of the runs without this wait,
+    # in none with it). A race in the test setup, not in the plugin.
+    /usr/bin/sleep 2
+    expect_lua 'Driver setup: active workspace' "return tostring(hl.get_active_workspace().id)" 3
     expect_lua 'Driver load' "_G.drv = dofile('/prism-test/prism_native.lua'); return tostring(_G.drv.enabled())" true
     expect_lua 'Driver swipe up' "local g = _G.drv.gesture('up'); _G.g = g
 assert(g.start({ delta = { x = 0, y = -6 }, time_ms = 1000 }), 'start refused')
@@ -338,6 +355,41 @@ return s.phase" opening
     expect_lua 'Lite tier still draws' "local d = hl.plugin.prism.renderDiagnostics(); return tostring(d.drawn > 0)" true
     expect_lua 'Back to full' "local p = hl.plugin.prism; assert(p.close(false)); assert(p.setQuality('full')); return 'ok'" ok
     wait_phase closed
+
+    # Dragging a window to another workspace. Hyprland cannot be made to deliver pointer events
+    # here, so the three halves of the drag call the same router the mouse listeners use; the
+    # move itself is done by the real Lua watcher (hl.dsp.window.move), which is what is under test.
+    local cur dst before_dst before_cur after_dst after_cur
+    cur=$(nested_ctl repl 'return tostring(hl.get_active_workspace().id)') || fail 'could not read the active workspace'
+    dst=1; [[ $cur == 1 ]] && dst=2
+    count_on() { nested_ctl -j clients | /usr/bin/jq --argjson w "$1" '[.[] | select(.workspace.id == $w)] | length'; }
+    before_dst=$(count_on "$dst"); before_cur=$(count_on "$cur")
+    expect_lua 'Drag: open with the watcher' "return tostring(_G.drv.toggle())" true
+    wait_phase open
+    expect_lua 'Drag: press on the window' "return tostring(hl.plugin.prism.pointerPress(0.5, 0.5))" true
+    expect_lua 'Drag: moving past the slop starts it' "return tostring(hl.plugin.prism.pointerMove(0.56, 0.5))" true
+    for (( i = 0; i < 50; ++i )); do
+        [[ $(nested_ctl repl 'local s = hl.plugin.prism.snapshot(); return tostring(s.animating)') == false ]] && break
+        /usr/bin/sleep 0.1
+    done
+    expect_lua 'Drag: the cube is unfolded' "return string.format('%.2f', hl.plugin.prism.snapshot().flatness)" 1.00
+    expect_lua 'Drag: aim at the other workspace and release' "local p = hl.plugin.prism; local c = assert(p.faceCentre($dst), 'workspace $dst is not in the row'); p.pointerMove(c.x, c.y); return tostring(p.pointerRelease(c.x, c.y))" true
+    for (( i = 0; i < 50; ++i )); do
+        [[ $(count_on "$dst") == $(( before_dst + 1 )) ]] && break
+        /usr/bin/sleep 0.1
+    done
+    after_dst=$(count_on "$dst"); after_cur=$(count_on "$cur")
+    [[ $after_dst == $(( before_dst + 1 )) && $after_cur == $(( before_cur - 1 )) ]] \
+        || fail "the drop did not move the window: workspace $dst had $before_dst now $after_dst, workspace $cur had $before_cur now $after_cur"
+    printf 'Drag: window moved from workspace %s to %s (%s -> %s and %s -> %s)\n' "$cur" "$dst" "$before_cur" "$after_cur" "$before_dst" "$after_dst"
+    expect_lua 'Drag: you stay where you were' "return tostring(hl.get_active_workspace().id)" "$cur"
+    expect_lua 'Drag: the cube folds back and stays open' "return hl.plugin.prism.snapshot().phase" open
+    for (( i = 0; i < 50; ++i )); do
+        [[ $(nested_ctl repl 'return string.format("%.2f", hl.plugin.prism.snapshot().flatness)') == 0.00 ]] && break
+        /usr/bin/sleep 0.1
+    done
+    expect_lua 'Drag: folded' "return string.format('%.2f', hl.plugin.prism.snapshot().flatness)" 0.00
+    expect_lua 'Drag: close' "_G.drv.reset(); return hl.plugin.prism.snapshot().phase" closed
 }
 
 # The auto-load path of the real config: opted in by a flag file, loaded from Lua. This is
@@ -591,6 +643,7 @@ cycles=0
 plugin_mount=()
 screenshot_output=
 test_windows=0
+test_drag=0
 case $mode in
     --check)
         [[ $# == 1 ]] || fail 'usage: nested.sh --check'
@@ -621,6 +674,10 @@ case $mode in
             shift
             if [[ ${1-} == --windows ]]; then
                 test_windows=1
+                shift
+            fi
+            if [[ ${1-} == --drag ]]; then
+                test_drag=1
                 shift
             fi
         fi
@@ -704,7 +761,7 @@ sandbox=(/usr/bin/bwrap \
     --chdir /run/prism/home --setenv PATH /usr/bin --setenv HOME /run/prism/home \
     --setenv XDG_RUNTIME_DIR /run/prism --setenv WAYLAND_DISPLAY /run/prism-parent \
     --setenv AQ_BACKENDS "${PRISM_NESTED_BACKEND:-headless}" --setenv PRISM_NESTED_BACKEND "${PRISM_NESTED_BACKEND:-headless}" --setenv HYPRLAND_NO_RT 1 --setenv HYPRLAND_NO_SD_VARS 1 --setenv HYPRLAND_NO_SD_NOTIFY 1 \
-    --setenv PRISM_NATIVE_FLAG /run/prism/prism-native --setenv PRISM_NATIVE_SO /prism-test/prism.so --setenv GSETTINGS_BACKEND memory --setenv PRISM_TEST_WINDOWS "$test_windows" --setenv PRISM_STRESS_VERBOSE "${PRISM_STRESS_VERBOSE:-0}" --setenv PRISM_STRESS_CYCLES "${PRISM_STRESS_CYCLES:-100}" -- \
+    --setenv PRISM_NATIVE_FLAG /run/prism/prism-native --setenv PRISM_NATIVE_SO /prism-test/prism.so --setenv GSETTINGS_BACKEND memory --setenv PRISM_TEST_WINDOWS "$test_windows" --setenv PRISM_TEST_DRAG "$test_drag" --setenv PRISM_STRESS_VERBOSE "${PRISM_STRESS_VERBOSE:-0}" --setenv PRISM_STRESS_CYCLES "${PRISM_STRESS_CYCLES:-100}" -- \
     /usr/bin/bash /prism-test/nested.sh --inside "$mode" "$cycles")
 
 if [[ $mode != --screenshot ]]; then
@@ -724,7 +781,7 @@ printf 'Saved nested Prism screenshot to %s\n' "$screenshot_output"
 if [[ $test_windows == 1 ]]; then
     # Content gate: the front face must show workspace 2's green window and a side
     # face workspace 1's red one. A flat placeholder pane has neither.
-    /usr/bin/python3 -I - "$screenshot_output" <<'PY' || fail 'the screenshot does not show the workspace windows on the faces'
+    /usr/bin/python3 -I - "$screenshot_output" "$([[ $test_drag == 1 ]] && echo drag || echo plain)" <<'PY' || fail 'the screenshot does not show the workspace windows on the faces'
 import sys
 from PIL import Image
 im = Image.open(sys.argv[1]).convert('RGB')
@@ -735,6 +792,10 @@ for r, g, b in im.getdata():
     if abs(r - 0x20) < 24 and abs(g - 0x40) < 24 and abs(b - 0xd0) < 24: blue += 1
 print(f'Face content pixels: green={green} red={red} blue={blue}')
 need = im.width * im.height // 200  # 0.5 % of the screen each
+# Mid-drag (--drag) the row shows workspaces 2 (green) and 3 (blue); workspace 1 is under the
+# dragged window. Otherwise: the front face green and a side face red.
+if len(sys.argv) > 2 and sys.argv[2] == 'drag':
+    sys.exit(0 if green > need and blue > need else 1)
 sys.exit(0 if green > need and red > need else 1)
 PY
 fi

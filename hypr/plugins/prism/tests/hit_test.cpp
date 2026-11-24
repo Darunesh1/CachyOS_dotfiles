@@ -26,7 +26,8 @@ int main() {
             ids[i] = static_cast<WorkspaceId>(i + 1);
         for (const double position : {0.0, 0.5, 1.0, 2.3, -1.7}) {
             for (const double openness : {1.0, 0.6}) {
-                for (const auto& face : projectFaces(ids, position, openness)) {
+              for (const double flatness : {0.0, 0.5, 1.0}) {
+                for (const auto& face : projectFaces(ids, position, openness, flatness)) {
                     for (const double u : {0.05, 0.3, 0.5, 0.8, 0.95}) {
                         for (const double v : {0.05, 0.5, 0.95}) {
                             const auto p = face.point(u, v);
@@ -38,6 +39,7 @@ int main() {
                         }
                     }
                 }
+              }
             }
         }
     }
@@ -61,6 +63,16 @@ int main() {
         const auto h = hitTest(ids, 1, 1, p.x, p.y);
         check(h && h->workspace == face.workspace, "the centre of a visible face hit another workspace");
         check(h->front == (face.workspace == 9), "only the middle face is the front one");
+    }
+
+    // The unfolded row (dragging a window): every workspace's centre hits that workspace.
+    for (const auto id : ids) {
+        const auto row = projectFaces(ids, 2, 1, 1);
+        const auto face = std::ranges::find(row, id, &ProjectedFace::workspace);
+        check(face != row.end(), "a workspace is missing from the flat row");
+        const auto p = face->point(0.5, 0.5);
+        const auto h = hitTest(ids, 2, 1, p.x, p.y, 1);
+        check(h && h->workspace == id, "the centre of a flat-row face hit another workspace");
     }
 
     // Closed (openness 0): the one face fills the output, so every point is on it.

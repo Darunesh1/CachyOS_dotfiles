@@ -277,7 +277,13 @@ std::optional<WorkspaceId> Core::targetFront() const {
     return workspaceAt(workspaces_, gesture_ ? facePosition_ : targetFacePosition_);
 }
 
+void Core::setFlat(bool flat) {
+    targetFlat_ = flat && phase() == Phase::Open;
+}
+
 void Core::reset() {
+    targetFlat_ = false;
+    flatness_ = flatVelocity_ = 0;
     gesture_.reset();
     originWorkspace_.reset();
     pendingSelection_.reset();
@@ -300,6 +306,11 @@ void Core::tick(double dtSeconds) {
     }
     if (!gesture_ || gesture_->direction != Direction::Horizontal)
         spring(facePosition_, faceVelocity_, targetFacePosition_, 24, dtSeconds);
+    // Folding back is forced when the cube is no longer open (closing, or reset elsewhere).
+    if (phase() != Phase::Open && phase() != Phase::Opening)
+        targetFlat_ = false;
+    spring(flatness_, flatVelocity_, targetFlat_ ? 1 : 0, 22, dtSeconds);
+    flatness_ = std::clamp(flatness_, 0.0, 1.0);
 
     completeClose();
 }
@@ -309,8 +320,9 @@ Snapshot Core::snapshot() const {
     const auto opennessAnimating = !gesture_ && (currentPhase == Phase::Opening || currentPhase == Phase::Closing);
     const auto faceAnimating = (!gesture_ || gesture_->direction != Direction::Horizontal) &&
         (facePosition_ != targetFacePosition_ || faceVelocity_ != 0);
-    return {currentPhase, openness_, facePosition_, workspaceAt(workspaces_, facePosition_), originWorkspace_,
-        opennessAnimating || faceAnimating};
+    const auto flatAnimating = flatness_ != (targetFlat_ ? 1.0 : 0.0) || flatVelocity_ != 0;
+    return {currentPhase, openness_, facePosition_, flatness_, workspaceAt(workspaces_, facePosition_), originWorkspace_,
+        opennessAnimating || faceAnimating || flatAnimating};
 }
 
 std::optional<WorkspaceId> Core::takeSelection() {
