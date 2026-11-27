@@ -1733,7 +1733,9 @@ BINARIES
             # Opted in and built is not the same as loaded: on 2026-11-24 the plugin silently did
             # not load at login (hl.plugin.load does nothing once the config has been read).
             local pn_loaded
-            pn_loaded=$(hyprctl plugin list 2>/dev/null | grep -c 'Plugin Prism')
+            # `|| true`: grep -c exits 1 on a count of 0, and the audit runs under set -e, so the
+            # one case this row exists to catch (not loaded) used to end the whole audit silently.
+            pn_loaded=$(hyprctl plugin list 2>/dev/null | grep -c 'Plugin Prism' || true)
             if ! command -v hyprctl >/dev/null || [[ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
                 row OK "prism native plugin" "opted in, built for this Hyprland (ABI matches); not in a Hyprland session, so loading was not checked"
             elif [[ "$pn_loaded" -ge 1 ]]; then
